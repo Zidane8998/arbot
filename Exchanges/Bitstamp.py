@@ -115,7 +115,9 @@ class BitstampExchange(IExchange):
         {'name:': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'last': json['last], 'fee': json['fee']}
         """
         res = self.api_call("ticker", {}, 0)
-        res['fee'] = self.getExchangeFee()
+        res['buy'] = float(res['ask'])
+        res['sell'] = float(res['bid'])
+        res['fee'] = float(self.getExchangeFee()) / 100
         return res
 
     #should return last buy price in USD

@@ -144,7 +144,7 @@ class BTCEExchange(IExchange):
 
         #package new ticker object and return
         ticker['name'] = self.name
-        ticker['fee'] = fee
+        ticker['fee'] =  fee / 100
 
         return ticker
 
