@@ -112,7 +112,7 @@ class BitstampExchange(IExchange):
     def getTicker(self):
         """
         Returns the ticker JSON object with the following format:
-        {'name:': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'fee': json['fee']}
+        {'name:': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'last': json['last], 'fee': json['fee']}
         """
         res = self.api_call("ticker", {}, 0)
         res['fee'] = self.getExchangeFee()

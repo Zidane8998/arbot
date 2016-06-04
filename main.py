@@ -1,8 +1,17 @@
 from Database import Database
+from Exchanges.BTC_E import BTCEExchange
 from Exchanges.Bitstamp import BitstampExchange
 
 
 def main():
+
+    btce = BTCEExchange()
+    print btce.getInfo()
+    print btce.getActiveOrders()
+    print btce.cancelOrder(1)
+    print btce.getExecutedOrders()
+    print btce.withdrawToAddress(1, 1)
+    print btce.getTicker()
 
     db = Database.Database()
 
@@ -28,6 +37,8 @@ def main():
     db.printResults(db.getAllClosedTransactionsFromOriginExchange('Bitfinex'))
     """
 
+    defaultTradeSize = 0.25
+    defaultProfitMargin = 0.50
     exchanges = []
     global_ticker = []
     bitstamp = BitstampExchange()
@@ -42,8 +53,8 @@ def main():
     """
     for ex in exchanges:
         json = ex.getTicker() #this call MUST return a dict with these elements or it will blow up
-        inner = {'name:': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'fee': json['fee']}
-        global_ticker.append(inner)
+        exTicker = {'name': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'fee': json['fee']}
+        global_ticker.append(exTicker)
         """
         Get all transactions with this exchange as a target (may replace later with individual
         database calls - slower but more accurate)
@@ -80,8 +91,14 @@ def main():
         """
         for cur in global_ticker:
             if cur['name'] != ex.name:
-                remoteSellPrice = cur['sell']
+                """
+                If a profit can be made by selling on another exchange, set up a new transaction
 
+                Profit formula: (sell price - sell fee)
+                """
+                if (cur['sell'] - cur['fee']) - ((exTicker['buy'] + exTicker['fee'] +
+                         (exTicker['buy'] * defaultTradeSize * 0.000014)) + defaultProfitMargin):
+                    pass
 
     print bitstamp.getAccountBalance("BTC")
     print bitstamp.getTicker()

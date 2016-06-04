@@ -37,7 +37,7 @@ class IExchange():
     #should return ticker information for the exchange as a dict
     """
     This method needs to return AT LEAST the following in this format or the main loop will blow up:
-    {'name:': <exchange name>, 'buy': <buy price>, 'sell': <sell price>, 'fee': <fee>}
+    {'name:': <exchange name>, 'buy': <buy price>, 'sell': <sell price>, 'last: <last price> 'fee': <fee>}
 
     """
     @abstractmethod
