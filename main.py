@@ -1,7 +1,30 @@
+from Database import Database
 from Exchanges.Bitstamp import BitstampExchange
 
 
 def main():
+
+    db = Database.Database()
+
+    db.createNewTransaction('PND', 10, 'Bitfinex', 'Bitstamp', 560)
+    db.printResults(db.getAllTransactions())
+    db.printResults(db.getAllPendingTransactions())
+    db.printResults(db.getAllActiveTransactions())
+    db.printResults(db.getAllInTransitTransactions())
+    db.printResults(db.getAllClosedTransactions())
+    
+    db.printResults(db.getAllTransactionsFromTargetExchange('Bitstamp'))
+    db.printResults(db.getAllPendingTransactionsFromTargetExchange('Bitstamp'))
+    db.printResults(db.getAllActiveTransactionsFromTargetExchange('Bitstamp'))
+    db.printResults(db.getAllInTransitTransactionsFromTargetExchange('Bitstamp'))
+    db.printResults(db.getAllClosedTransactionsFromTargetExchange('Bitstamp'))
+
+    db.printResults(db.getAllTransactionsFromOriginExchange('Bitfinex'))
+    db.printResults(db.getAllPendingTransactionsFromOriginExchange('Bitfinex'))
+    db.printResults(db.getAllActiveTransactionsFromOriginExchange('Bitfinex'))
+    db.printResults(db.getAllInTransitTransactionsFromOriginExchange('Bitfinex'))
+    db.printResults(db.getAllClosedTransactionsFromOriginExchange('Bitfinex'))
+
     bitstamp = BitstampExchange()
     print bitstamp.getAccountBalance("BTC")
     print bitstamp.getTicker()

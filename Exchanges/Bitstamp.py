@@ -17,8 +17,8 @@ class BitstampExchange(IExchange):
         self.api_secret = "WIGmO0WRKXdqAXfasWvgdB25O88lobc6"
         self.__nonce_v = '{:.10f}'.format(time.time() * 1000).split('.')[0]
 
-
-    def request(self, path, params):
+    @staticmethod
+    def request(path, params):
         """
         Returns a JSON object from POST using API Key, Secret, User Key and an API path.
 
@@ -49,7 +49,6 @@ class BitstampExchange(IExchange):
                 .hexdigest().upper()
 
         return signature
-
 
     def api_call(self, method, params, private=0):
         """
