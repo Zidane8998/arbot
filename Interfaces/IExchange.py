@@ -34,6 +34,11 @@ class IExchange():
     def getCurrentSellPrice(self):
         pass
 
+    #should return ticker information for the exchange as a dict
+    @abstractmethod
+    def getTicker(self):
+        pass
+
     #should cancel the order
     #param orderID: the orderID to cancel
     @abstractmethod

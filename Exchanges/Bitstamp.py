@@ -12,6 +12,7 @@ from Interfaces.IExchange import IExchange
 class BitstampExchange(IExchange):
 
     def __init__(self):
+        self.name = "Bitstamp"
         self.api_key = "xlVE2zCKgeH8EiZ490QUmzmSzsKSzDIy"
         self.username = "743672"
         self.api_secret = "WIGmO0WRKXdqAXfasWvgdB25O88lobc6"
@@ -112,7 +113,7 @@ class BitstampExchange(IExchange):
         """
         Returns the ticker JSON object.
         """
-        return json.dumps(self.api_call("ticker", {}, 0))
+        return self.api_call("ticker", {}, 0)
 
     #should return last buy price in USD
     def getCurrentBuyPrice(self):
