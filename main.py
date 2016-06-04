@@ -12,6 +12,11 @@ def main():
     print btce.getExecutedOrders()
     print btce.withdrawToAddress(1, 1)
     print btce.getTicker()
+    print "Get buy price: " + str(btce.getCurrentBuyPrice())
+    print "Get sell price: " + str(btce.getCurrentSellPrice())
+    print "Get exchange fee: " + str(btce.getExchangeFee())
+    print "Sell: " + str(btce.sell(1))
+    print "Buy: " + str(btce.buy(1))
 
     db = Database.Database()
 

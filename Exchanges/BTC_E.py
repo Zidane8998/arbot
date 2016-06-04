@@ -95,10 +95,11 @@ class BTCEExchange(IExchange):
         Due to constraints in the BTC-E API, no instant (market) order is available.
         Creates a buy limit order set to the top of the ask table - should execute instantly. May need some work.
 
-        @param amount: amount in BTC
+        @param amount: amount in BTC - ***MUST BE ROUNDED TO 3 PLACES BECAUSE BTC-E IS RETARDED***
         """
         currentPrice = self.getCurrentBuyPrice()
-        return self.api_call("buy", {'amount': amount, 'price': currentPrice})
+        return self.api_call("Trade", {'pair': "btc_usd", 'type': 'buy', 'amount': float("{0:.3f}".format(amount)),
+                                       'rate': currentPrice})
 
     # market sell - must be instant (market) sell
     # should return a JSON dictionary to be parsed including order ID and execution status
@@ -107,10 +108,11 @@ class BTCEExchange(IExchange):
         Due to constraints in the BTC-E API, no instant (market) order is available.
         Creates a sell limit order set to the top of the bid table - should execute instantly. May need some work.
 
-        @param amount: amount in BTC
+        @param amount: amount in BTC - ***MUST BE ROUNDED TO 3 PLACES BECAUSE BTC-E IS RETARDED***
         """
         currentPrice = self.getCurrentSellPrice()
-        return self.api_call("sell", {'amount': amount, 'price': currentPrice})
+        return self.api_call("Trade", {'pair': "btc_usd", 'type': 'sell', 'amount': float("{0:.3f}".format(amount)),
+                                       'rate': currentPrice})
 
     # should return a balance available in either BTC or USD
     def getAccountBalance(self, currency="USD"):
@@ -146,20 +148,27 @@ class BTCEExchange(IExchange):
 
         return ticker
 
+    def getTickerNoFee(self):
+        """
+        Returns the ticker JSON object without the second call to get the fee. Saves overhead for subsequent calls.
+        """
+        # get ticker from public API v3
+        return requests.get("https://btc-e.com/api/3/ticker/btc_usd").json()['btc_usd']
+
 
     # should return last buy price in USD
     def getCurrentBuyPrice(self):
         """
         Returns the last ask price in USD.
         """
-        return self.api_call("ticker", {})['ask']
+        return self.getTickerNoFee()['buy']
 
     # should return last sell price in US
     def getCurrentSellPrice(self):
         """
         Returns the last bid price in USD.
         """
-        return self.api_call("ticker", {})['bid']
+        return self.getTickerNoFee()['sell']
 
     # should cancel the order
     # param orderID: the orderID to cancel
@@ -185,6 +194,8 @@ class BTCEExchange(IExchange):
         Returns all active orders and their current status.
 
         @param id_list: provide order IDs to check their status.
+
+        **NOTE**: This is not supported for BTC-E. Only open orders are accessible.
         """
         pass
 
@@ -200,21 +211,30 @@ class BTCEExchange(IExchange):
         """
         Returns the exchanges's buy/sell fee
         """
-        return self.api_call("balance", {})['fee']
+        # get trade info from public API v3
+        info = requests.get("https://btc-e.com/api/3/info").json()
+
+        fee = info['pairs']['btc_usd']['fee']
+
+        return fee
 
     def getUnconfirmedDeposits(self):
         """
         Returns all pending "in transit" BTC deposits without at least 3 confirmations.
+
+        ***NOTE***: This is not supported for BTC-E.
         """
-        return json.dumps(self.api_call("unconfirmed_btc", {}))
+        pass
 
     # should return a BTC address for the exchange
     # this needs to be verifiable with a static file somewhere, don't want to send BTC to a bad address
     def getBTCAddress(self):
         """
         Returns the BTC deposit address for BTC-E.
+
+        ***NOTE***: This is not supported by BTC-E. This method MUST be updated manually.
         """
-        return self.api_call("bitcoin_deposit_address", {})
+        return "1CggtUtpNrwtv1sHGSsXr4Mh3jQiL3R9u4"
 
     def withdrawToAddress(self, address, amount):
         """
