@@ -35,8 +35,18 @@ class IExchange():
         pass
 
     #should return ticker information for the exchange as a dict
+    """
+    This method needs to return AT LEAST the following in this format or the main loop will blow up:
+    {'name:': <exchange name>, 'buy': <buy price>, 'sell': <sell price>, 'fee': <fee>}
+
+    """
     @abstractmethod
     def getTicker(self):
+        pass
+
+    # should return the buy/sell fee
+    @abstractmethod
+    def getExchangeFee(self):
         pass
 
     #should cancel the order

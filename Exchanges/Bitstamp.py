@@ -111,9 +111,12 @@ class BitstampExchange(IExchange):
     #should return a balance available in either BTC or USD
     def getTicker(self):
         """
-        Returns the ticker JSON object.
+        Returns the ticker JSON object with the following format:
+        {'name:': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'fee': json['fee']}
         """
-        return self.api_call("ticker", {}, 0)
+        res = self.api_call("ticker", {}, 0)
+        res['fee'] = self.getExchangeFee()
+        return res
 
     #should return last buy price in USD
     def getCurrentBuyPrice(self):
@@ -167,6 +170,13 @@ class BitstampExchange(IExchange):
         """
         param = {'id': 1, 'order_id':2, 'test': 3}
         return json.dumps(self.api_call("order_status", param, 1))
+
+    #should return the buy/sell fee
+    def getExchangeFee(self):
+        """
+        Returns the exchanges's buy/sell fee
+        """
+        return self.api_call("balance", {}, 1)['fee']
 
     def getUnconfirmedDeposits(self):
         """

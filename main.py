@@ -29,7 +29,7 @@ def main():
     """
 
     exchanges = []
-    global_ticker = {}
+    global_ticker = []
     bitstamp = BitstampExchange()
     exchanges.append(bitstamp)
 
@@ -41,9 +41,9 @@ def main():
     Main program loop: for all exchanges, get ticker information
     """
     for ex in exchanges:
-        json = ex.getTicker() #this call MUST return a dict or it will blow up
-        inner = {'buy': json['ask'], 'sell': json['bid']}
-        global_ticker[ex.name] = inner
+        json = ex.getTicker() #this call MUST return a dict with these elements or it will blow up
+        inner = {'name:': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'fee': json['fee']}
+        global_ticker.append(inner)
         """
         Get all transactions with this exchange as a target (may replace later with individual
         database calls - slower but more accurate)
@@ -76,8 +76,11 @@ def main():
                 print cur
 
         """
-        Find buy low / sell high pairing if it exists
+        Find buy low / sell high pairing if it exists by comparing all exchange prices
         """
+        for cur in global_ticker:
+            if cur['name'] != ex.name:
+                remoteSellPrice = cur['sell']
 
 
     print bitstamp.getAccountBalance("BTC")
