@@ -9,12 +9,20 @@ class IExchange():
 
     #market buy - must be instant (market) buy
     #should return a JSON dictionary to be parsed including order ID and execution status
+    """
+    IMPORTANT!
+    @returns: {success code (0,1), amount purchased}
+    """
     @abstractmethod
     def buy(self, amount):
         pass
 
     #market sell - must be instant (market) sell
     #should return a JSON dictionary to be parsed including order ID and execution status
+    """
+    IMPORTANT!
+    @returns: {success code (0,1), total revenue returned}
+    """
     @abstractmethod
     def sell(self, amount):
         pass

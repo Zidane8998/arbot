@@ -3,6 +3,7 @@ import hmac
 import httplib
 import json
 import urllib
+from decimal import Decimal
 
 import requests
 
@@ -17,18 +18,6 @@ class BTCEExchange(IExchange):
         self.username = "Fireblade8998"
         self.api_secret = "e740a78137d11056490b3e72a04bc6d35c035c351bde2dad8ddf419c9f848b4c"
         self.nonce = self.nonce_api_call()
-
-    @staticmethod
-    def request(path, params):
-        """
-        Returns a JSON object from POST using API Key, Secret, User Key and an API path.
-
-        @param path: the string at the end of the API string, "ticker" for example
-        @param params: the encoded parameters and signature required to authenticate
-        """
-        url = "https://www.btc-e.com/api/" + path + "/"
-        r = requests.post(url, params)
-        return r.json()
 
     def getNonce(self):
         """
@@ -96,10 +85,15 @@ class BTCEExchange(IExchange):
         Creates a buy limit order set to the top of the ask table - should execute instantly. May need some work.
 
         @param amount: amount in BTC - ***MUST BE ROUNDED TO 3 PLACES BECAUSE BTC-E IS RETARDED***
+        @return: {success (0 or 1), amount bought}
         """
         currentPrice = self.getCurrentBuyPrice()
-        return self.api_call("Trade", {'pair': "btc_usd", 'type': 'buy', 'amount': float("{0:.3f}".format(amount)),
+        json = self.api_call("Trade", {'pair': "btc_usd", 'type': 'buy', 'amount': float("{0:.3f}".format(amount)),
                                        'rate': currentPrice})
+        if json['success'] == 0:
+            return {'success': 0, 'amount' : 0}
+        else:
+            return {'success': json['success'], 'amount': json['received']}
 
     # market sell - must be instant (market) sell
     # should return a JSON dictionary to be parsed including order ID and execution status
@@ -144,8 +138,9 @@ class BTCEExchange(IExchange):
 
         #package new ticker object and return
         ticker['name'] = self.name
-        ticker['fee'] =  fee / 100
-
+        ticker['fee'] = Decimal(fee / 100)
+        ticker['buy'] = Decimal(ticker['buy'])
+        ticker['sell'] = Decimal(ticker['sell'])
         return ticker
 
     def getTickerNoFee(self):

@@ -3,6 +3,7 @@ import hmac
 import json
 import sys
 import time
+from decimal import Decimal
 
 import requests
 
@@ -81,7 +82,11 @@ class BitstampExchange(IExchange):
         @param amount: amount in BTC
         """
         currentPrice = self.getCurrentBuyPrice()
-        return self.api_call("buy", {'amount': amount, 'price': currentPrice}, 1)
+        json = self.api_call("buy", {'amount': amount, 'price': currentPrice}, 1)
+        if 'error' in json:
+            return {'success': 0, 'amount': 0}
+        else:
+            return {'success': 1, 'amount': json['amount']}
 
     #market sell - must be instant (market) sell
     #should return a JSON dictionary to be parsed including order ID and execution status
@@ -115,9 +120,9 @@ class BitstampExchange(IExchange):
         {'name:': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'last': json['last], 'fee': json['fee']}
         """
         res = self.api_call("ticker", {}, 0)
-        res['buy'] = float(res['ask'])
-        res['sell'] = float(res['bid'])
-        res['fee'] = float(self.getExchangeFee()) / 100
+        res['buy'] = Decimal(res['ask'])
+        res['sell'] = Decimal(res['bid'])
+        res['fee'] = Decimal(self.getExchangeFee()) / 100
         return res
 
     #should return last buy price in USD
@@ -170,7 +175,7 @@ class BitstampExchange(IExchange):
         """
         Returns all completed orders and their current status.
         """
-        param = {'id': 1, 'order_id':2, 'test': 3}
+        param = {'id': 1, 'order_id': 2, 'test': 3}
         return json.dumps(self.api_call("order_status", param, 1))
 
     #should return the buy/sell fee

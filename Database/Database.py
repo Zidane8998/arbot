@@ -9,6 +9,7 @@ class Database:
         self.conn.row_factory = self.dict_factory
         self.newInsert = "INSERT INTO BOT_TRANSACTION (STATUS,AMOUNT,ORIGIN_EXCHANGE,TARGET_EXCHANGE," \
                          "ORIGINAL_BUY_PRICE) VALUES"
+        self.getByID = "SELECT * FROM BOT_TRANSACTION WHERE ID={id}"
         self.getAll = "SELECT * FROM BOT_TRANSACTION"
         self.getAllPending = "SELECT * FROM BOT_TRANSACTION WHERE STATUS='PND'"
         self.getAllActive = "SELECT * FROM BOT_TRANSACTION WHERE STATUS='ACT'"
@@ -50,14 +51,20 @@ class Database:
         return d
 
     def createNewTransaction(self, status, amount, origin_exchange, target_exchange, original_buy_price):
+        #package the inner SQL string contents
         inner = self.newInsert + "('{st}', {am}, '{oe}', '{te}', {ob})".format(st=status, am=amount, oe=origin_exchange,
                                                                             te=target_exchange, ob=original_buy_price)
+        #execute and return the ID of the new row
         if self.conn.execute(inner):
-            return True
+            self.conn.commit()
+            return self.cursor.lastrowid()
 
     """
     -----------------GET ALL TRANSACTIONS: RETURN EVERYTHING---------------------------
     """
+
+    def getTransactionByID(self, ID):
+        return self.conn.execute(self.getByID.format(id=ID))
 
     def getAllTransactions(self):
         return self.conn.execute(self.getAll).fetchall()
@@ -130,6 +137,14 @@ class Database:
     def getAllNewTransactionsFromOriginExchange(self, origin_exchange):
         query = self.getAllNewFromOriginExchange.format(oe=origin_exchange)
         return self.conn.execute(query).fetchall()
+
+    """
+     -------------------------------------------ALTER TRANSACTIONS-----------------------------------------------------
+    """
+    def changeTransactionStatus(self, ID, status):
+        query = "UPDATE BOT_TRANSACTION SET STATUS='{st}' WHERE ID={id}".format(st=status, id=ID)
+        self.conn.execute(query)
+        self.conn.commit()
 
     def printResults(self, results):
         if results == []:
