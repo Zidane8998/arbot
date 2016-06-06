@@ -11,7 +11,7 @@ class IExchange():
     #should return a JSON dictionary to be parsed including order ID and execution status
     """
     IMPORTANT!
-    @returns: {success code (0,1), amount purchased}
+    @returns: {success code (0,1), amount purchased, price bought at}
     """
     @abstractmethod
     def buy(self, amount):
@@ -21,7 +21,7 @@ class IExchange():
     #should return a JSON dictionary to be parsed including order ID and execution status
     """
     IMPORTANT!
-    @returns: {success code (0,1), total revenue returned}
+    @returns: {success code (0,1), total revenue returned, price sold at}
     """
     @abstractmethod
     def sell(self, amount):

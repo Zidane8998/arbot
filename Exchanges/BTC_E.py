@@ -91,9 +91,9 @@ class BTCEExchange(IExchange):
         json = self.api_call("Trade", {'pair': "btc_usd", 'type': 'buy', 'amount': float("{0:.3f}".format(amount)),
                                        'rate': currentPrice})
         if json['success'] == 0:
-            return {'success': 0, 'amount' : 0}
+            return {'success': 0, 'amount': 0}
         else:
-            return {'success': json['success'], 'amount': json['received']}
+            return {'success': json['success'], 'amount': json['received'], 'price': Decimal(currentPrice)}
 
     # market sell - must be instant (market) sell
     # should return a JSON dictionary to be parsed including order ID and execution status

@@ -86,7 +86,7 @@ class BitstampExchange(IExchange):
         if 'error' in json:
             return {'success': 0, 'amount': 0}
         else:
-            return {'success': 1, 'amount': json['amount']}
+            return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price'])}
 
     #market sell - must be instant (market) sell
     #should return a JSON dictionary to be parsed including order ID and execution status

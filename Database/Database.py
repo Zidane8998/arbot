@@ -4,7 +4,7 @@ import sqlite3
 
 class Database:
     def __init__(self):
-        self.conn = sqlite3.connect(':memory:')
+        self.conn = sqlite3.connect('database.db')
         self.cursor = self.conn.cursor()
         self.conn.row_factory = self.dict_factory
         self.newInsert = "INSERT INTO BOT_TRANSACTION (STATUS,AMOUNT,ORIGIN_EXCHANGE,TARGET_EXCHANGE," \
@@ -38,7 +38,9 @@ class Database:
                                                  "AND STATUS='INT'"
         self.getAllClosedFromOriginExchange = "SELECT * FROM BOT_TRANSACTION WHERE ORIGIN_EXCHANGE='{oe}' " \
                                               "AND STATUS='CLD'"
-        self.createTestTable()
+
+        self.getTransBuyPrice = "SELECT ORIGINAL_BUY_PRICE FROM BOT_TRANSACTION WHERE ID={id}"
+        #self.createTestTable()
 
     @staticmethod
     def dict_factory(cursor, row):
@@ -55,9 +57,11 @@ class Database:
         inner = self.newInsert + "('{st}', {am}, '{oe}', '{te}', {ob})".format(st=status, am=amount, oe=origin_exchange,
                                                                             te=target_exchange, ob=original_buy_price)
         #execute and return the ID of the new row
-        if self.conn.execute(inner):
-            self.conn.commit()
-            return self.cursor.lastrowid()
+        self.conn.execute(inner)
+        self.conn.commit()
+        query = "select seq from sqlite_sequence where name='BOT_TRANSACTION'"
+        seq = self.conn.execute(query).fetchone()
+        return seq['seq']
 
     """
     -----------------GET ALL TRANSACTIONS: RETURN EVERYTHING---------------------------
@@ -139,10 +143,22 @@ class Database:
         return self.conn.execute(query).fetchall()
 
     """
-     -------------------------------------------ALTER TRANSACTIONS-----------------------------------------------------
+    --------------------------------------------GET TRANSACTIONS - Individual attributes--------------------------------
+    """
+    def getTransactionBuyPrice(self, ID):
+        query = self.getTransBuyPrice.format(id=ID)
+        return self.conn.execute(query).fetchall()
+
+    """
+     -------------------------------------------ALTER TRANSACTIONS------------------------------------------------------
     """
     def changeTransactionStatus(self, ID, status):
         query = "UPDATE BOT_TRANSACTION SET STATUS='{st}' WHERE ID={id}".format(st=status, id=ID)
+        self.conn.execute(query)
+        self.conn.commit()
+
+    def clearOutTargetExchange(self, ID):
+        query = "UPDATE BOT_TRANSACTION SET TARGET_EXCHANGE=NULL WHERE ID={id}".format(id=ID)
         self.conn.execute(query)
         self.conn.commit()
 
