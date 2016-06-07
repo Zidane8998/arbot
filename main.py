@@ -225,6 +225,24 @@ def main():
                         Mark object as pending
                         Clear out target exchange, set current exchange to origin
                 """
+                
+                # calculate whether a profit can be made
+                curSell = ex.getCurrentSellPrice()
+                
+                # enter 0 for buy fee - was factored into the original buy price
+                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, cur['ORIGINAL_BUY_PRICE'],
+                                                                                                exTicker['fee'], 0)
+                # if profit can be made, sell and mark object as closed
+                if profit >= defaultProfitMargin:
+                    print "Selling Active transaction " + str(cur['ID']) + " on " + ex.name + " exchange."
+                    print "-expected sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
+                    print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))
+                    print "-total fees: $" + str('{0:.2f}'.format(totalFees))
+                    print "-EXPECTED PROFIT: $" + str('{0:.2f}'.format(profit))
+                    
+                    # sell the BTC on the current (target) exchange
+                    
+                
 
             """
             Process all PENDING transactions with exchange as target
