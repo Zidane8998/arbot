@@ -18,6 +18,7 @@ class BitstampExchange(IExchange):
         self.username = "743672"
         self.api_secret = "WIGmO0WRKXdqAXfasWvgdB25O88lobc6"
         self.__nonce_v = '{:.10f}'.format(time.time() * 1000).split('.')[0]
+        self.unconfirmedDeposits = False
 
     @staticmethod
     def request(path, params):
@@ -101,17 +102,20 @@ class BitstampExchange(IExchange):
         return self.api_call("sell", {'amount': amount, 'price': currentPrice}, 1)
 
     #should return a balance available in either BTC or USD
-    def getAccountBalance(self, currency="USD"):
+    def getAccountBalance(self, currency={}):
         """
         Returns a balance in USD or BTC
 
-        @param currency: BTC or USD. Leave blank for USD.
+        @param currency: BTC or USD. Leave blank for both.
         """
         balance = self.api_call("balance", {}, 1)
-        if str.__contains__(currency, "BTC"):
+        if currency.__contains__("BTC"):
             return json.dumps(balance['btc_balance'])
-        elif str.__contains__(currency, "USD"):
+        elif currency.__contains__("USD"):
             return json.dumps(balance['usd_balance'])
+        else:
+            return {'BTC': Decimal(balance['btc_balance']), 'USD': Decimal(balance['usd_balance'])}
+
 
     #should return a balance available in either BTC or USD
     def getTicker(self):

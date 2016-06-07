@@ -18,6 +18,7 @@ class BTCEExchange(IExchange):
         self.username = "Fireblade8998"
         self.api_secret = "e740a78137d11056490b3e72a04bc6d35c035c351bde2dad8ddf419c9f848b4c"
         self.nonce = self.nonce_api_call()
+        self.unconfirmedDeposits = False
 
     def getNonce(self):
         """
@@ -109,17 +110,20 @@ class BTCEExchange(IExchange):
                                        'rate': currentPrice})
 
     # should return a balance available in either BTC or USD
-    def getAccountBalance(self, currency="USD"):
+    def getAccountBalance(self, currency={}):
         """
         Returns a balance in USD or BTC
 
-        @param currency: BTC or USD. Leave blank for USD.
+        @param currency: BTC or USD. Leave blank for both.
         """
-        balance = self.api_call("balance", {})
-        if str.__contains__(currency, "BTC"):
-            return json.dumps(balance['btc_balance'])
-        elif str.__contains__(currency, "USD"):
-            return json.dumps(balance['usd_balance'])
+        data = self.getInfo()
+
+        if currency.__contains__("BTC"):
+            return Decimal(data['return']['funds']['btc'])
+        elif currency.__contains__("USD"):
+            return Decimal(data['return']['funds']['usd'])
+        else:
+            return {'BTC': Decimal(data['return']['funds']['btc']), 'USD': Decimal(data['return']['funds']['usd'])}
 
     # should return a balance available in either BTC or USD
     def getTicker(self):

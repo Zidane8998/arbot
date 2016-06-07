@@ -4,7 +4,7 @@ import sqlite3
 
 class Database:
     def __init__(self):
-        self.conn = sqlite3.connect('database.db')
+        self.conn = sqlite3.connect(':memory:')
         self.cursor = self.conn.cursor()
         self.conn.row_factory = self.dict_factory
         self.newInsert = "INSERT INTO BOT_TRANSACTION (STATUS,AMOUNT,ORIGIN_EXCHANGE,TARGET_EXCHANGE," \
@@ -40,7 +40,7 @@ class Database:
                                               "AND STATUS='CLD'"
 
         self.getTransBuyPrice = "SELECT ORIGINAL_BUY_PRICE FROM BOT_TRANSACTION WHERE ID={id}"
-        #self.createTestTable()
+        self.createTestTable()
 
     @staticmethod
     def dict_factory(cursor, row):
@@ -154,6 +154,11 @@ class Database:
     """
     def changeTransactionStatus(self, ID, status):
         query = "UPDATE BOT_TRANSACTION SET STATUS='{st}' WHERE ID={id}".format(st=status, id=ID)
+        self.conn.execute(query)
+        self.conn.commit()
+
+    def changeAmount(self, ID, amount):
+        query = "UPDATE BOT_TRANSACTION SET AMOUNT='{am}' WHERE ID={id}".format(am=amount, id=ID)
         self.conn.execute(query)
         self.conn.commit()
 
