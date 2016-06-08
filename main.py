@@ -179,7 +179,7 @@ def main():
                             Remove target exchange, set current exchange to origin
                 """
 
-                # calculate if BTC has arrived
+                # calculate if BTC has arrived, mark as active
                 if balanceInBTC > 0:
                     totalPendingAmount = db.getSumOfAllPendingTransactionsByTargetExchange(ex.name)
                     totalActiveAmount = db.getSumOfAllActiveTransactionsByTargetExchange(ex.name)
@@ -189,7 +189,7 @@ def main():
                     totalExpectedAmount = totalPendingAmount + totalActiveAmount + totalIntransAmount
 
                     # discrepancy - tracks the total amount "missing" vs. the expected value lost via transaction fee
-                    discrepancy = Decimal(totalExpectedAmount - balanceInBTC)
+                    discrepancy = Decimal(abs(totalExpectedAmount - balanceInBTC))
 
                     # if rounding errors (or otherwise) exist, roll them into the amount to get the actual amount
                     if discrepancy > 0:
@@ -247,9 +247,20 @@ def main():
                     print "-EXPECTED PROFIT: $" + str('{0:.2f}'.format(profit))
                     
                     # sell the BTC on the current (target) exchange
-                    
-                
+                    print "Attempting to sell " + str(defaultTradeSize) + " on " + ex.name + " exchange!"
+                    data = ex.sell(cur['AMOUNT'])
 
+                    if data['success'] == 1:
+                        # if sell went through, update and close transaction
+                        db.changeFinalSellAmount(cur['ID'], data['amount'])
+                        db.changeTransactionStatus(cur['ID'], 'CLD')
+                    else:
+                        print "Something went wrong while trying to sell. Transaction was not closed."
+                else:
+                    # set transaction to pending status
+                    db.changeTransactionStatus(cur['ID'], 'PND')
+                    # clear out target exchange
+                    db.clearOutTargetExchange(cur['ID'])
             """
             Process all PENDING transactions with exchange as target
             """
@@ -368,10 +379,16 @@ def main():
                                                                                         originalBuyPrice, remoteFee, 0)
 
                                         if profit >= defaultProfitMargin:
-                                            # sell the coins on the remote exchange
-                                            remoteExchange.sell(json['amount'])
-                                            # set as closed
-                                            db.changeTransactionStatus(id, 'CLD')
+
+                                            # attempt to sell the coins on the remote exchange
+                                            data = remoteExchange.sell(json['amount'])
+                                            if data['success'] == 1:
+                                                # set final sell price
+                                                db.changeFinalSellAmount(id, data['amount'])
+                                                # set as closed
+                                                db.changeTransactionStatus(id, 'CLD')
+                                            else:
+                                                print "Something went wrong while trying to sell. Transaction was not closed."
                                         # otherwise, set to pending and clear out target exchange
                                         else:
                                             # set as pending

@@ -106,8 +106,13 @@ class BTCEExchange(IExchange):
         @param amount: amount in BTC - ***MUST BE ROUNDED TO 3 PLACES BECAUSE BTC-E IS RETARDED***
         """
         currentPrice = self.getCurrentSellPrice()
-        return self.api_call("Trade", {'pair': "btc_usd", 'type': 'sell', 'amount': float("{0:.3f}".format(amount)),
+        json = self.api_call("Trade", {'pair': "btc_usd", 'type': 'sell', 'amount': float("{0:.3f}".format(amount)),
                                        'rate': currentPrice})
+
+        if json['success'] == 0:
+            return {'success': 0, 'amount': 0}
+        else:
+            return {'success': json['success'], 'amount': json['received'], 'price': Decimal(currentPrice), 'id': json['order_id']}
 
     # should return a balance available in either BTC or USD
     def getAccountBalance(self, currency={}):

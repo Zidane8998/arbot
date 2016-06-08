@@ -87,7 +87,7 @@ class BitstampExchange(IExchange):
         if 'error' in json:
             return {'success': 0, 'amount': 0}
         else:
-            return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price'])}
+            return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price']), 'id': json['id']}
 
     #market sell - must be instant (market) sell
     #should return a JSON dictionary to be parsed including order ID and execution status
@@ -99,7 +99,11 @@ class BitstampExchange(IExchange):
         @param amount: amount in BTC
         """
         currentPrice = self.getCurrentSellPrice()
-        return self.api_call("sell", {'amount': amount, 'price': currentPrice}, 1)
+        json = self.api_call("sell", {'amount': amount, 'price': currentPrice}, 1)
+        if 'error' in json:
+            return {'success': 0, 'amount': 0}
+        else:
+            return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price'])}
 
     #should return a balance available in either BTC or USD
     def getAccountBalance(self, currency={}):
