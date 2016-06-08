@@ -152,12 +152,10 @@ def main():
         # check for unconfirmed deposits - just in case unconfirmed deposits flag is not set
         unconfirmedDepositsCheck(exchanges, db)
         for ex in exchanges:
-            json = ex.getTicker() #this call MUST return a dict with these elements or it WILL blow up
+            json = ex.getTicker() # this call MUST return a dict with these elements or it WILL blow up
             exTicker = {'name': ex.name, 'buy': json['buy'], 'sell': json['sell'], 'fee': json['fee']}
             global_ticker[ex.name] = exTicker
 
-            # get balance in BTC from exchange - need this to process In Transit transactions
-            balanceInBTC = Decimal(0.75013415)
             """
             Process all transactions with this exchange as a target (may replace later with individual
             database calls - slower but more accurate)
@@ -167,6 +165,9 @@ def main():
             Process all IN TRANSIT transactions with exchange as target
             """
             inTransit = sorted(db.getAllInTransitTransactionsFromTargetExchange(ex.name), key=itemgetter('ORIGINAL_BUY_PRICE'), reverse=False)
+
+            # get balance in BTC from exchange - need this to process In Transit transactions
+            balanceInBTC = Decimal(0.7492341)
             for cur in inTransit:
                 """
                 Calculate if BTC has arrived
@@ -180,36 +181,41 @@ def main():
 
                 # calculate if BTC has arrived
                 if balanceInBTC > 0:
-                    allPending = db.getAllPendingTransactionsFromTargetExchange(ex.name)
-                    allActive = db.getAllActiveTransactionsFromTargetExchange(ex.name)
+                    totalPendingAmount = db.getSumOfAllPendingTransactionsByTargetExchange(ex.name)
+                    totalActiveAmount = db.getSumOfAllActiveTransactionsByTargetExchange(ex.name)
+                    totalIntransAmount = db.getSumOfAllInTransitTransactionsByTargetExchange(ex.name)
 
-                    # sum all pending transactions BTC amount
-                    totalPendingAmount = 0
-                    for pnd in allPending:
-                        totalPendingAmount += Decimal(pnd['AMOUNT'])
+                    # sum up the total expected amount for this exchange to make sure there's no errors
+                    totalExpectedAmount = totalPendingAmount + totalActiveAmount + totalIntransAmount
 
-                    # sum all active transactions BTC amount
-                    totalActiveAmount = 0
-                    for act in allActive:
-                        totalActiveAmount += Decimal(act['AMOUNT'])
+                    # discrepancy - tracks the total amount "missing" vs. the expected value lost via transaction fee
+                    discrepancy = Decimal(totalExpectedAmount - balanceInBTC)
 
-                    # if there's BTC not included in the total pending + active amount, BTC has arrived
-                    if balanceInBTC - totalPendingAmount - totalActiveAmount >= 0.001:
-                        allInTransit = db.getAllInTransitTransactionsFromTargetExchange(ex.name)
+                    # if rounding errors (or otherwise) exist, roll them into the amount to get the actual amount
+                    if discrepancy > 0:
+                        print "In Transit transaction discrepancy found on " + ex.name + ": " + str(discrepancy) + " BTC"
+                        noOfTrans = Decimal(len(db.getAllInTransitTransactionsFromTargetExchange(ex.name)))
+                        adjust = Decimal(cur['AMOUNT']) * discrepancy * noOfTrans
+                        print "Modifying transaction " + str(cur['ID']) + ", adjusting amount down " + str(adjust)
+                        cur['AMOUNT'] = Decimal(cur['AMOUNT']) - adjust
+
+                        # persist changes at the database level
+                        db.changeAmount(cur['ID'], Decimal(cur['AMOUNT']) - adjust)
+
+                    # test = balanceInBTC - totalPendingAmount - totalActiveAmount
+
+                    # if there's BTC not included in the total pending + active amount, some BTC has arrived
+                    if balanceInBTC - totalPendingAmount - totalActiveAmount >= cur['AMOUNT']:
+                        # get new value after database update
+                        totalIntransAmount = db.getSumOfAllInTransitTransactionsByTargetExchange(ex.name)
 
                         # add up all other In Transit transactions to approximate the actual amount received
-                        inTransitAmountMinusCur = 0
-                        for intrans in allInTransit:
-                            if intrans['ID'] != cur['ID']:
-                                inTransitAmountMinusCur += Decimal(intrans['AMOUNT'])
+                        inTransitAmountMinusCur = totalIntransAmount - Decimal(cur['AMOUNT'])
 
-                        # if there's enough to complete the transaction, set it to Active to subtract it for the
-                        # next values in the transaction list that are In Transit also
-                        if balanceInBTC - totalPendingAmount - totalActiveAmount >= cur['AMOUNT'] - 0.001:
-                            newAmount = balanceInBTC - totalPendingAmount - totalActiveAmount - inTransitAmountMinusCur
+                        # if there's enough to complete the transaction, set it to Active
+                        # test = balanceInBTC - totalPendingAmount - totalActiveAmount - inTransitAmountMinusCur
+                        if balanceInBTC - totalPendingAmount - totalActiveAmount - inTransitAmountMinusCur >= cur['AMOUNT']:
                             db.changeTransactionStatus(cur['ID'], 'ACT')
-                            db.changeAmount(cur['ID'], Decimal(newAmount))
-
 
             """
             Process all ACTIVE transactions with exchange as target

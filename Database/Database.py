@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from decimal import Decimal
 
 
 class Database:
@@ -148,6 +149,33 @@ class Database:
     def getTransactionBuyPrice(self, ID):
         query = self.getTransBuyPrice.format(id=ID)
         return self.conn.execute(query).fetchall()
+
+    def getSumOfAllPendingTransactionsByTargetExchange(self, exchange):
+        query = "SELECT SUM(AMOUNT) as 'SUM' FROM BOT_TRANSACTION WHERE STATUS='PND' AND TARGET_EXCHANGE='{ex}';".format(ex=exchange)
+        data = self.conn.execute(query).fetchone()
+
+        if data['SUM'] != None:
+            return Decimal(data['SUM'])
+        else:
+            return 0
+
+    def getSumOfAllActiveTransactionsByTargetExchange(self, exchange):
+        query = "SELECT SUM(AMOUNT) as 'SUM' FROM BOT_TRANSACTION WHERE STATUS='ACT' AND TARGET_EXCHANGE='{ex}';".format(ex=exchange)
+        data = self.conn.execute(query).fetchone()
+
+        if data['SUM'] != None:
+            return Decimal(data['SUM'])
+        else:
+            return 0
+
+    def getSumOfAllInTransitTransactionsByTargetExchange(self, exchange):
+        query = "SELECT SUM(AMOUNT) as 'SUM' FROM BOT_TRANSACTION WHERE STATUS='INT' AND TARGET_EXCHANGE='{ex}';".format(ex=exchange)
+        data = self.conn.execute(query).fetchone()
+
+        if data != None:
+            return Decimal(data['SUM'])
+
+        return data
 
     """
      -------------------------------------------ALTER TRANSACTIONS------------------------------------------------------
