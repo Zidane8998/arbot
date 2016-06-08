@@ -218,6 +218,32 @@ def main():
                             db.changeTransactionStatus(cur['ID'], 'ACT')
 
             """
+            Process all PENDING transactions with exchange as target
+            """
+            pending = db.getAllPendingTransactionsFromTargetExchange(ex.name)
+            for cur in pending:
+                """
+                If profit can be made by selling on this exchange:
+                    Mark as active
+                Else:
+                    Remove target exchange, set current exchange to origin
+                """
+                curSell = ex.getCurrentSellPrice()
+
+                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfitNoTransactionFee(curSell, cur[
+                    'ORIGINAL_BUY_PRICE'],
+                                                                                                    exTicker['fee'], 0)
+
+                # if coins can be sold for a profit on this exchange, mark as active
+                if profit >= defaultProfitMargin:
+                    db.changeTransactionStatus(cur['ID'], 'ACT')
+
+                # else, remove target exchange if it exists and set the current exchange as the origin
+                else:
+                    db.clearOutTargetExchange(cur['ID'])
+                    db.changeOriginExchange(cur['ID'], ex.name)
+
+            """
             Process all ACTIVE transactions with exchange as target
             """
             actives = db.getAllActiveTransactionsFromTargetExchange(ex.name)
@@ -261,18 +287,6 @@ def main():
                     db.changeTransactionStatus(cur['ID'], 'PND')
                     # clear out target exchange
                     db.clearOutTargetExchange(cur['ID'])
-            """
-            Process all PENDING transactions with exchange as target
-            """
-            pending = db.getAllPendingTransactionsFromTargetExchange(ex.name)
-            for cur in pending:
-                """
-                If profit can be made by selling on this exchange:
-                    Sell the BTC
-                    Mark object as closed, record real profit amount (somewhere??)
-                Else:
-                    Remove target exchange, set current exchange to origin
-                """
 
             """
             Get all transactions with this exchange as an origin (may replace later with individual
@@ -339,19 +353,19 @@ def main():
                                 # make sure the buy went through before making a new transaction
 
                                 print "Attempting to buy " + str(defaultTradeSize) + " from " + key2 + " exchange!"
-                                json = remoteExchange.buy(defaultTradeSize)
-                                if json['success'] != 0:
+                                data = remoteExchange.buy(defaultTradeSize)
+                                if data['success'] != 0:
                                     # if buy is successful, make new transaction
-                                    print "Buy successful, bought " + str(json['amount']) + "@ $" + str(json['price'])
+                                    print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
 
                                     # if buy price is different than expected, record it in the transaction
-                                    totalBuyCost = (json['price'] * defaultTradeSize) + (json['price'] * defaultTradeSize * remoteFee)
-                                    id = db.createNewTransaction('NEW', defaultTradeSize, key2, key, totalBuyCost)
+                                    totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * remoteFee)
+                                    id = db.createNewTransaction('NEW', data['amount'], key2, key, totalBuyCost)
 
                                     # if profit margin still exists with locked in buy price:
                                     # withdraw and change transaction status
                                     curSell = currentExchange.getCurrentSellPrice()
-                                    remoteBuy = json['price']
+                                    remoteBuy = remoteExchange.getCurrentBuyPrice()
 
                                     # set buy fee to 0, it's already factored into totalBuyCost above
                                     profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell,
@@ -362,7 +376,7 @@ def main():
                                     if profit >= defaultProfitMargin:
 
                                         # withdraw to the current exchange
-                                        remoteExchange.withdrawToAddress(currentExchange.getBTCAddress(), json['amount'])
+                                        remoteExchange.withdrawToAddress(currentExchange.getBTCAddress(), data['amount'])
 
                                         # set transaction status to In Transit
                                         db.changeTransactionStatus(id, 'INT')
@@ -379,12 +393,12 @@ def main():
                                                                                         originalBuyPrice, remoteFee, 0)
 
                                         if profit >= defaultProfitMargin:
-
                                             # attempt to sell the coins on the remote exchange
-                                            data = remoteExchange.sell(json['amount'])
-                                            if data['success'] == 1:
+                                            data2 = remoteExchange.sell(data['amount'])
+
+                                            if data2['success'] == 1:
                                                 # set final sell price
-                                                db.changeFinalSellAmount(id, data['amount'])
+                                                db.changeFinalSellAmount(id, data2['amount'])
                                                 # set as closed
                                                 db.changeTransactionStatus(id, 'CLD')
                                             else:
@@ -420,19 +434,19 @@ def main():
                                 # make sure the buy went through before making a new transaction
 
                                 print "Attempting to buy " + str(defaultTradeSize) + " from " + key + " exchange!"
-                                json = currentExchange.buy(defaultTradeSize)
-                                if json['success'] != 0:
+                                data = currentExchange.buy(defaultTradeSize)
+                                if data['success'] != 0:
                                     # if buy is successful, make new transaction
-                                    print "Buy successful, bought " + str(json['amount']) + "@ $" + str(json['price'])
+                                    print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
 
                                     # if buy price is different than expected, record it in the transaction
-                                    totalBuyCost = (json['price'] * defaultTradeSize) + (json['price'] * defaultTradeSize * curFee)
-                                    id = db.createNewTransaction('NEW', defaultTradeSize, key2, key, totalBuyCost)
+                                    totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * curFee)
+                                    id = db.createNewTransaction('NEW', data['amount'], key2, key, totalBuyCost)
 
                                     # if profit margin still exists with locked in buy price:
                                     # withdraw and change transaction status
                                     remoteSell = remoteExchange.getCurrentSellPrice()
-                                    curBuy = json['price']
+                                    curBuy = currentExchange.getCurrentBuyPrice()
 
                                     # set buy fee to 0, it's already factored into totalBuyCost above
                                     profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell,
@@ -444,7 +458,7 @@ def main():
 
                                         # withdraw to the current exchange
                                         currentExchange.withdrawToAddress(remoteExchange.getBTCAddress(),
-                                                                          json['amount'])
+                                                                          data['amount'])
 
                                         # set transaction status to In Transit
                                         db.changeTransactionStatus(id, 'INT')
@@ -464,9 +478,14 @@ def main():
 
                                         if profit >= defaultProfitMargin:
                                             # sell the coins on the remote exchange
-                                            currentExchange.sell(json['amount'])
-                                            # set as closed
-                                            db.changeTransactionStatus(id, 'CLD')
+                                            data2 = currentExchange.sell(data['amount'])
+
+                                            if data2['success'] == 1:
+                                                # set final sell price
+                                                db.changeFinalSellAmount(id, data2['amount'])
+                                                # set as closed
+                                                db.changeTransactionStatus(id, 'CLD')
+
                                         # otherwise, set to pending and clear out target exchange
                                         else:
                                             # set as pending

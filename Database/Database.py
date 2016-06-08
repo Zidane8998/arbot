@@ -180,6 +180,14 @@ class Database:
     """
      -------------------------------------------ALTER TRANSACTIONS------------------------------------------------------
     """
+    def changeOriginExchange(self, ID, exchange):
+        query = "UPDATE BOT_TRANSACTION SET ORIGIN_EXCHANGE='{oe}' WHERE ID={id}".format(oe=exchange, id=ID)
+        self.conn.execute(query)
+        self.conn.commit()
+
+
+
+
     def changeFinalSellAmount(self, ID, amount):
         query = "UPDATE BOT_TRANSACTION SET FINAL_SELL_PRICE='{am}' WHERE ID={id}".format(am=amount, id=ID)
         self.conn.execute(query)
