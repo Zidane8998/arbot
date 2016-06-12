@@ -11,7 +11,7 @@ class IExchange():
     #should return a JSON dictionary to be parsed including order ID and execution status
     """
     IMPORTANT!
-    @returns: {success code (0,1), amount purchased, price bought at}
+    @returns: {success code (0,1), amount purchased, price bought at, order ID: (0 if finished, id otherwise)}
     """
     @abstractmethod
     def buy(self, amount):
@@ -64,6 +64,10 @@ class IExchange():
         pass
 
     #should return all orders that are currently open as JSON
+    """
+    Needs to return a dictionary list in the following form:
+    [{'id': id, 'amount': amount ..... etc}]
+    """
     @abstractmethod
     def getOpenOrders(self):
         pass

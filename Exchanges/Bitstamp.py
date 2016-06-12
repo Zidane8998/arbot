@@ -18,7 +18,6 @@ class BitstampExchange(IExchange):
         self.username = "743672"
         self.api_secret = "WIGmO0WRKXdqAXfasWvgdB25O88lobc6"
         self.__nonce_v = '{:.10f}'.format(time.time() * 1000).split('.')[0]
-        self.unconfirmedDeposits = False
 
     @staticmethod
     def request(path, params):
@@ -87,7 +86,14 @@ class BitstampExchange(IExchange):
         if 'error' in json:
             return {'success': 0, 'amount': 0}
         else:
-            return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price']), 'id': json['id']}
+            # check on the order status after buy is sent
+            if self.getOrderStatus(json['id'] != "Finished"):
+                # order is not filled yet, return the order ID
+                return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price']), 'order_id': json['id']}
+
+            # if the order is filled, don't sent an order_id back
+            else:
+                return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price']), 'order_id': 0}
 
     #market sell - must be instant (market) sell
     #should return a JSON dictionary to be parsed including order ID and execution status
@@ -104,6 +110,21 @@ class BitstampExchange(IExchange):
             return {'success': 0, 'amount': 0}
         else:
             return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price'])}
+
+    def getOrderStatus(self, ID):
+        """
+        Fetches the order status of a particular order ID. Useful for checking whether an order has finished
+        being filled.
+
+        @param ID: the order ID of the order in question
+        """
+
+        #json = self.api_call("order_status", {'id': ID}, 1)
+        json={'status': "Finished", 'transactions': 4}
+        if 'error' in json:
+            return []
+        else:
+            return json['status']
 
     #should return a balance available in either BTC or USD
     def getAccountBalance(self, currency={}):
@@ -162,7 +183,11 @@ class BitstampExchange(IExchange):
         """
         Returns all open orders.
         """
-        return json.dumps(self.api_call("open_orders", {}, 1))
+        test = [{'id': 123123, 'datetime': '2016-12-25 12:12:23', 'type': 0, 'price': 570.67, 'amount': 2}, {'id': 123124, 'datetime': '2016-12-25 12:12:23', 'type': 0, 'price': 571.67, 'amount': 2}]
+
+        #return self.api_call("open_orders", {}, 1)
+        return test
+
 
     #should return all orders that are pending as JSON
     #param id_list: a list of IDs of pending orders

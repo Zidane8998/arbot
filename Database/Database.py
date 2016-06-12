@@ -10,12 +10,16 @@ class Database:
         self.conn.row_factory = self.dict_factory
         self.newInsert = "INSERT INTO BOT_TRANSACTION (STATUS,AMOUNT,ORIGIN_EXCHANGE,TARGET_EXCHANGE," \
                          "ORIGINAL_BUY_PRICE) VALUES"
+        self.newInsertOrderID = "INSERT INTO BOT_TRANSACTION (STATUS,AMOUNT,ORIGIN_EXCHANGE,TARGET_EXCHANGE," \
+                                "ORIGINAL_BUY_PRICE, ORDER_ID) VALUES"
         self.getByID = "SELECT * FROM BOT_TRANSACTION WHERE ID={id}"
         self.getAll = "SELECT * FROM BOT_TRANSACTION"
         self.getAllPending = "SELECT * FROM BOT_TRANSACTION WHERE STATUS='PND'"
         self.getAllActive = "SELECT * FROM BOT_TRANSACTION WHERE STATUS='ACT'"
         self.getAllInTransit = "SELECT * FROM BOT_TRANSACTION WHERE STATUS='INT'"
         self.getAllClosed = "SELECT * FROM BOT_TRANSACTION WHERE STATUS='CLD'"
+        self.getAllNew = "SELECT * FROM BOT_TRANSACTION WHERE STATUS='NEW'"
+
         self.getAllFromTargetExchange = "SELECT * FROM BOT_TRANSACTION WHERE TARGET_EXCHANGE='{te}'"
         self.getAllPendingFromTargetExchange = "SELECT * FROM BOT_TRANSACTION WHERE TARGET_EXCHANGE='{te}' " \
                                                "AND STATUS='PND'"
@@ -64,6 +68,18 @@ class Database:
         seq = self.conn.execute(query).fetchone()
         return seq['seq']
 
+    def createNewTransactionWithOrderID(self, status, amount, origin_exchange, target_exchange, original_buy_price, order_id):
+        # package the inner SQL string contents
+        inner = self.newInsertOrderID + "('{st}', {am}, '{oe}', '{te}', {ob}, {oi})".format(st=status, am=amount, oe=origin_exchange,
+                                                                               te=target_exchange,
+                                                                               ob=original_buy_price, oi=order_id)
+        # execute and return the ID of the new row
+        self.conn.execute(inner)
+        self.conn.commit()
+        query = "select seq from sqlite_sequence where name='BOT_TRANSACTION'"
+        seq = self.conn.execute(query).fetchone()
+        return seq['seq']
+
     """
     -----------------GET ALL TRANSACTIONS: RETURN EVERYTHING---------------------------
     """
@@ -85,6 +101,9 @@ class Database:
 
     def getAllClosedTransactions(self):
         return self.conn.execute(self.getAllClosed).fetchall()
+
+    def getAllNewTransactions(self):
+        return self.conn.execute(self.getAllNew).fetchall()
 
     """
     ---------------------TARGET EXCHANGE GET TRANSACTIONS: RETURN ONLY FROM TARGET EXCHANGE---------------------------
@@ -224,6 +243,7 @@ class Database:
             AMOUNT                     REAL                    NOT NULL,
             ORIGIN_EXCHANGE            TEXT                    NOT NULL,
             TARGET_EXCHANGE            TEXT,
+            ORDER_ID                   TEXT,
             ORIGINAL_BUY_PRICE         REAL                    NOT NULL,
             FINAL_SELL_PRICE           REAL
 

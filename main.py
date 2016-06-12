@@ -44,14 +44,39 @@ def calculateProfitNoTransactionFee(sellPrice, buyPrice, sellerFee, buyerFee, de
 
     return profit, totalSellRevenue, totalBuyCost, totalFees
 
+def processAllNewTransactions(db, exchanges):
+    """
+    Process all NEW transactions - buy orders that have not yet been filled.
+    This must be done prior to other commands to make sure the buy orders can be processed in a timely fashion.
+    """
+    newTrans = sorted(db.getAllNewTransactions(), key=itemgetter('ORIGINAL_BUY_PRICE'), reverse=False)
 
-def unconfirmedDepositsCheck(exchanges, db):
-    for cur in exchanges:
-        data = db.getAllInTransitTransactionsFromTargetExchange(cur.name)
-        if data != []:
-            cur.unconfirmedDeposits = True
-        elif data == [] and cur.unconfirmedDeposits is True:
-            cur.unconfirmedDeposits = False
+    for trans in newTrans:
+        # retrieve the origin exchange object
+        exchange = getExchangeByName(exchanges, trans['ORIGIN_EXCHANGE'])
+
+        withdraw = False
+        remoteAddress = None
+        amount = trans['AMOUNT']
+
+        # if exchange is Bitstamp, use Order Status - change to In Transit and withdraw if complete
+        if exchange.name == "Bitstamp":
+            if exchange.getOrderStatus(trans['ORDER_ID']) == "Finished":
+                remoteAddress = getExchangeByName(exchanges, trans['TARGET_EXCHANGE']).getBTCAddress()
+                withdraw = True
+
+        #  for all other exchanges: if the order no longer appears in the open orders list, withdraw and complete
+        else:
+            openList = exchange.getOpenOrders()
+            for op in openList:
+                if op['id'] == trans['ORDER_ID']:
+                    remoteAddress = exchange.getBTCAddress()
+                    withdraw = True
+
+        if withdraw == True:
+            exchange.withdrawToAddress(remoteAddress, trans['AMOUNT'])
+            db.changeTransactionStatus(trans['ID'], 'INT')
+
 
 def main():
 
@@ -111,13 +136,11 @@ def main():
     print bitstamp.getAccountBalance()
     """
 
-
-
     db = Database.Database()
 
-    testID = db.createNewTransaction('INT', 0.25, 'Bitfinex', 'Bitstamp', 560.03)
-    testID = db.createNewTransaction('INT', 0.25, 'Bitfinex', 'Bitstamp', 540.69)
-    testID = db.createNewTransaction('PND', 0.25, 'Bitfinex', 'Bitstamp', 560.03)
+    testID = db.createNewTransactionWithOrderID('NEW', 0.25, 'BTC-E', 'Bitstamp', 560.03, 12446)
+    testID = db.createNewTransactionWithOrderID('NEW', 0.25, 'Bitstamp', 'BTC-E', 540.69, 12447)
+    testID = db.createNewTransaction('PND', 0.25, 'BTC-E', 'Bitstamp', 560.03)
     #testID = db.createNewTransaction('PND', 0.25, 'Bitfinex', 'Bitstamp', 560.03)
     #db.clearOutTargetExchange(testID)
 
@@ -135,8 +158,6 @@ def main():
     exchanges.append(bitstamp)
     exchanges.append(btce)
 
-    unconfirmedDepositsCheck(exchanges, db)
-
     """
     Populate ticker information for all exchanges, returning JSON format of {Bitcoin exchange name: name, buy: buy price, sell: sell price}
     """
@@ -149,13 +170,17 @@ def main():
     Main program loop: for all exchanges, get ticker information
     """
     while 1:
-        # check for unconfirmed deposits - just in case unconfirmed deposits flag is not set
-        unconfirmedDepositsCheck(exchanges, db)
+
         for ex in exchanges:
-            json = ex.getTicker() # this call MUST return a dict with these elements or it WILL blow up
+            """
+            Process all NEW transactions - buy orders that have not yet been filled.
+            This must be done prior to other commands to make sure the buy orders can be processed in a timely fashion.
+            """
+            processAllNewTransactions(db, exchanges)
+
+            json = ex.getTicker()  # this call MUST return a dict with these elements or it WILL blow up
             exTicker = {'name': ex.name, 'buy': json['buy'], 'sell': json['sell'], 'fee': json['fee']}
             global_ticker[ex.name] = exTicker
-
             """
             Process all transactions with this exchange as a target (may replace later with individual
             database calls - slower but more accurate)
@@ -228,11 +253,9 @@ def main():
                 Else:
                     Remove target exchange, set current exchange to origin
                 """
-                curSell = ex.getCurrentSellPrice()
+                curSell = Decimal(ex.getCurrentSellPrice())
 
-                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfitNoTransactionFee(curSell, cur[
-                    'ORIGINAL_BUY_PRICE'],
-                                                                                                    exTicker['fee'], 0)
+                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfitNoTransactionFee(curSell, Decimal(cur['ORIGINAL_BUY_PRICE']), exTicker['fee'], 0)
 
                 # if coins can be sold for a profit on this exchange, mark as active
                 if profit >= defaultProfitMargin:
@@ -259,10 +282,10 @@ def main():
                 """
                 
                 # calculate whether a profit can be made
-                curSell = ex.getCurrentSellPrice()
+                curSell = Decimal(ex.getCurrentSellPrice())
                 
                 # enter 0 for buy fee - was factored into the original buy price
-                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, cur['ORIGINAL_BUY_PRICE'],
+                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, Decimal(cur['ORIGINAL_BUY_PRICE']),
                                                                                                 exTicker['fee'], 0)
                 # if profit can be made, sell and mark object as closed
                 if profit >= defaultProfitMargin:
@@ -354,12 +377,21 @@ def main():
 
                                 print "Attempting to buy " + str(defaultTradeSize) + " from " + key2 + " exchange!"
                                 data = remoteExchange.buy(defaultTradeSize)
+
                                 if data['success'] != 0:
+                                    # if buy price is different than expected, record it in the transaction
+                                    totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * remoteFee)
+
+                                    # if order ID is returned, buy is still being filled, needs time to execute
+                                    # create a new transaction to track the buy and continue on through the loop
+                                    if data['order_id'] != 0:
+                                        id = db.createNewTransactionWithOrderID('NEW', data['amount'], key2, key, totalBuyCost, data['order_id'])
+                                        print "Buy order is not complete, leaving in NEW status."
+                                        continue
+
                                     # if buy is successful, make new transaction
                                     print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
 
-                                    # if buy price is different than expected, record it in the transaction
-                                    totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * remoteFee)
                                     id = db.createNewTransaction('NEW', data['amount'], key2, key, totalBuyCost)
 
                                     # if profit margin still exists with locked in buy price:
@@ -435,13 +467,23 @@ def main():
 
                                 print "Attempting to buy " + str(defaultTradeSize) + " from " + key + " exchange!"
                                 data = currentExchange.buy(defaultTradeSize)
+
                                 if data['success'] != 0:
+                                    # if buy price is different than expected, record it in the transaction
+                                    totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * curFee)
+
+                                    # if order ID is returned, buy is still being filled, needs time to execute
+                                    # create a new transaction to track the buy and continue on through the loop
+                                    if data['order_id'] != 0:
+                                        id = db.createNewTransactionWithOrderID('NEW', data['amount'], key, key2,
+                                                                                totalBuyCost, data['order_id'])
+                                        print "Buy order is not complete, leaving in NEW status."
+                                        continue
+
                                     # if buy is successful, make new transaction
                                     print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
 
-                                    # if buy price is different than expected, record it in the transaction
-                                    totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * curFee)
-                                    id = db.createNewTransaction('NEW', data['amount'], key2, key, totalBuyCost)
+                                    id = db.createNewTransaction('NEW', data['amount'], key, key2, totalBuyCost)
 
                                     # if profit margin still exists with locked in buy price:
                                     # withdraw and change transaction status
