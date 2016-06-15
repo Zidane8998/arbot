@@ -44,6 +44,7 @@ def calculateProfitNoTransactionFee(sellPrice, buyPrice, sellerFee, buyerFee, de
 
     return profit, totalSellRevenue, totalBuyCost, totalFees
 
+
 def processAllNewTransactions(db, exchanges):
     """
     Process all NEW transactions - buy orders that have not yet been filled.
@@ -76,6 +77,54 @@ def processAllNewTransactions(db, exchanges):
         if withdraw == True:
             exchange.withdrawToAddress(remoteAddress, trans['AMOUNT'])
             db.changeTransactionStatus(trans['ID'], 'INT')
+
+
+def findExchangePairs(current, exchanges, curBuy=0, defaultProfitMargin=0.50):
+    """
+    Takes a particular exchange and finds any potential profit pairs, sorting by the highest profit.
+    """
+    pairs = []
+    for remote in exchanges:
+        if remote != current:
+
+            # update both the current and remote exchange ticker values
+            curTicker = current.getTicker()
+            remoteTicker = remote.getTicker()
+
+            curSell = curTicker['sell']
+            remoteSell = remoteTicker['sell']
+            if curBuy == 0:
+                curBuy = curTicker['buy']
+            remoteBuy = remoteTicker['buy']
+            curFee = curTicker['fee']
+            remoteFee = remoteTicker['fee']
+
+            """
+            If profit is available by buying on the current exchange and selling remotely, store in list
+            """
+            # BUY from current, SELL on remote
+            profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(remoteSell, curBuy,
+                                                                                remoteFee, curFee)
+
+            if profit >= defaultProfitMargin:
+                pairs.append({'profit': profit, 'sellExchange': remote, 'buyExchange': current})
+
+            """
+            If profit is available by buying on a remote exchange and selling on this exchange, store in list
+            """
+            # BUY from remote, SELL on current
+            profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, remoteBuy,
+                                                                                curFee, remoteFee)
+            if profit >= defaultProfitMargin:
+                pairs.append({'profit': profit, 'sellExchange': current, 'buyExchange': remote})
+
+            """
+            Sort the list by highest expected profit
+            """
+            sorted(pairs, key=itemgetter('profit'), reverse=False)
+
+    return pairs
+
 
 
 def main():
@@ -141,6 +190,8 @@ def main():
     testID = db.createNewTransactionWithOrderID('NEW', 0.25, 'BTC-E', 'Bitstamp', 560.03, 12446)
     testID = db.createNewTransactionWithOrderID('NEW', 0.25, 'Bitstamp', 'BTC-E', 540.69, 12447)
     testID = db.createNewTransaction('PND', 0.25, 'BTC-E', 'Bitstamp', 560.03)
+    db.clearOutTargetExchange(testID)
+    test = db.getAllTransactions()
     #testID = db.createNewTransaction('PND', 0.25, 'Bitfinex', 'Bitstamp', 560.03)
     #db.clearOutTargetExchange(testID)
 
@@ -158,6 +209,8 @@ def main():
     exchanges.append(bitstamp)
     exchanges.append(btce)
 
+    bitstamp.buy(2)
+    btce.buy(2)
     """
     Populate ticker information for all exchanges, returning JSON format of {Bitcoin exchange name: name, buy: buy price, sell: sell price}
     """
@@ -285,7 +338,7 @@ def main():
                 curSell = Decimal(ex.getCurrentSellPrice())
                 
                 # enter 0 for buy fee - was factored into the original buy price
-                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, Decimal(cur['ORIGINAL_BUY_PRICE']),
+                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfitNoTransactionFee(curSell, Decimal(cur['ORIGINAL_BUY_PRICE']),
                                                                                                 exTicker['fee'], 0)
                 # if profit can be made, sell and mark object as closed
                 if profit >= defaultProfitMargin:
@@ -296,7 +349,7 @@ def main():
                     print "-EXPECTED PROFIT: $" + str('{0:.2f}'.format(profit))
                     
                     # sell the BTC on the current (target) exchange
-                    print "Attempting to sell " + str(defaultTradeSize) + " on " + ex.name + " exchange!"
+                    print "Attempting to sell " + str(cur['AMOUNT']) + " on " + ex.name + " exchange!"
                     data = ex.sell(cur['AMOUNT'])
 
                     if data['success'] == 1:
@@ -312,25 +365,59 @@ def main():
                     db.clearOutTargetExchange(cur['ID'])
 
             """
-            Get all transactions with this exchange as an origin (may replace later with individual
+            Get all PENDING transactions with this exchange as an ORIGIN (may replace later with individual
             database calls - slower but more accurate)
             """
-            for cur in db.getAllTransactionsFromOriginExchange(ex.name):
+            test = db.getAllTransactions()
+            pending = db.getAllPendingTransactionsFromOriginExchange(ex.name)
+            for cur in pending:
                 """
-                Process all PENDING transactions with exchange as origin
+                If profit can be made by selling on this exchange:
+                Sell the BTC
+                Mark object as closed, record real profit amount (somewhere??)
                 """
-                if cur['STATUS'] == 'PND':
-                    """
-                    If profit can be made by selling on this exchange:
-                        Sell the BTC
-                        Mark object as closed, record real profit amount (somewhere??)
-                    """
 
+                # calculate whether a profit can be made
+                curSell = Decimal(ex.getCurrentSellPrice())
+
+                # enter 0 for buy fee - was factored into the original buy price
+                profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfitNoTransactionFee(curSell, Decimal(
+                    cur['ORIGINAL_BUY_PRICE']), exTicker['fee'], 0)
+
+                # if profit can be made, sell and mark object as closed
+                if profit >= defaultProfitMargin:
+                    print "Selling Pending transaction " + str(cur['ID']) + " on " + ex.name + " exchange."
+                    print "-expected sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
+                    print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))
+                    print "-total fees: $" + str('{0:.2f}'.format(totalFees))
+                    print "-EXPECTED PROFIT: $" + str('{0:.2f}'.format(profit))
+
+                    # sell the BTC on the current (target) exchange
+                    print "Attempting to sell " + str(cur['AMOUNT']) + " on " + ex.name + " exchange!"
+                    data = ex.sell(cur['AMOUNT'])
+
+                    if data['success'] == 1:
+                        # if sell went through, update and close transaction
+                        db.changeFinalSellAmount(cur['ID'], data['amount'])
+                        db.changeTransactionStatus(cur['ID'], 'CLD')
+                    else:
+                        print "Something went wrong while trying to sell. Transaction was not closed."
+
+                else:
                     """
                     If profit can be made by selling on a remote exchange:
-                       Mark object as IN TRANSIT, set target exchange as remote exchange
-                       Withdraw to target exchange
+                    Mark object as IN TRANSIT, set target exchange as remote exchange
+                    Withdraw to target exchange
                     """
+                    # use exchange pairs method to find the highest profit margin pair
+                    pairs = findExchangePairs(ex, exchanges, Decimal(cur['ORIGINAL_BUY_PRICE']))
+
+                    # use the first one returned in the list and sell
+                    for pair in pairs:
+                        if pair['sellExchange'] != ex:
+                            remote = pair['sellExchange']
+                            ex.withdrawToAddress(remote.getBTCAddress(), cur['AMOUNT'])
+                            db.changeTransactionStatus(cur['ID'], 'INT')
 
             """
             Find buy low / sell high pairing if it exists by comparing all exchange price points
@@ -366,7 +453,7 @@ def main():
                             profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, remoteBuy,
                                                                                                 curFee, remoteFee)
 
-                            if profit >= defaultProfitMargin:
+                            if profit >= defaultProfitMargin and remoteExchange.readyForBuy is True:
                                 print "Profit opportunity: buying from " + key2 + " and selling on " + key
                                 print "-total sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
                                 print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))
@@ -456,7 +543,7 @@ def main():
                             profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(remoteSell, curBuy,
                                                                                                 remoteFee, curFee)
 
-                            if profit >= defaultProfitMargin:
+                            if profit >= defaultProfitMargin and currentExchange.readyForBuy is True:
                                 print "Profit opportunity: buying from " + key + " and selling on " + key2
                                 print "-total sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
                                 print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))

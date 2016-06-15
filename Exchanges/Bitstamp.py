@@ -18,6 +18,7 @@ class BitstampExchange(IExchange):
         self.username = "743672"
         self.api_secret = "WIGmO0WRKXdqAXfasWvgdB25O88lobc6"
         self.__nonce_v = '{:.10f}'.format(time.time() * 1000).split('.')[0]
+        self.readyForBuy = True
 
     @staticmethod
     def request(path, params):
@@ -76,12 +77,24 @@ class BitstampExchange(IExchange):
     #should return a JSON dictionary to be parsed including order ID and execution status
     def buy(self, amount):
         """
-        Due to constraints in the Bitstamp API, no instant (market) order is available.
-        Creates a buy limit order set to the top of the ask table - should execute instantly. May need some work.
+        1. Check if enough funds exist for the buy, if not mark exchange as "no buy"
+        2. Due to constraints in the Bitstamp API, no instant (market) order is available.
+           Creates a buy limit order set to the top of the ask table - should execute instantly. May need some work.
 
         @param amount: amount in BTC
         """
+
         currentPrice = self.getCurrentBuyPrice()
+
+        data = self.getAccountBalance()
+        usd = data['USD']
+
+        # check that enough funds exist in the exchange, if not mark exchange as "no buy" and return
+        if amount * currentPrice >= usd:
+            print "Exchange " + self.name + " has run out of funds and is being marked as no buy."
+            self.readyForBuy = False
+            return {'success': 0, 'amount': 0}
+
         json = self.api_call("buy", {'amount': amount, 'price': currentPrice}, 1)
         if 'error' in json:
             return {'success': 0, 'amount': 0}
@@ -109,7 +122,7 @@ class BitstampExchange(IExchange):
         if 'error' in json:
             return {'success': 0, 'amount': 0}
         else:
-            return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price'])}
+            return {'success': 1, 'amount': json['amount'], 'price': Decimal(json['price']), 'order_id': 0}
 
     def getOrderStatus(self, ID):
         """
@@ -138,6 +151,8 @@ class BitstampExchange(IExchange):
             return json.dumps(balance['btc_balance'])
         elif currency.__contains__("USD"):
             return json.dumps(balance['usd_balance'])
+        if balance == {}:
+            return {}
         else:
             return {'BTC': Decimal(balance['btc_balance']), 'USD': Decimal(balance['usd_balance'])}
 
@@ -151,7 +166,8 @@ class BitstampExchange(IExchange):
         res = self.api_call("ticker", {}, 0)
         res['buy'] = Decimal(res['ask'])
         res['sell'] = Decimal(res['bid'])
-        res['fee'] = Decimal(self.getExchangeFee()) / 100
+        res['fee'] = Decimal(self.getExchangeFee() / 100) #Decimal(self.getExchangeFee()) / 100
+        res['name'] = self.name
         return res
 
     #should return last buy price in USD
@@ -216,7 +232,9 @@ class BitstampExchange(IExchange):
         """
         Returns the exchanges's buy/sell fee
         """
-        return self.api_call("balance", {}, 1)['fee']
+        #data = self.api_call("balance", {}, 1)['fee']
+
+        return 0.25
 
     def getUnconfirmedDeposits(self):
         """
@@ -239,4 +257,5 @@ class BitstampExchange(IExchange):
         @param address: the BTC address to send the coins to
         @param amount: the amount to send from Bitstamp's wallet
         """
-        return json.dumps(self.api_call("bitcoin_withdrawal", {'address': address, 'amount': amount}, 1))
+        data = self.api_call("bitcoin_withdrawal", {'address': address, 'amount': amount, 'instant': 0}, 1)
+        return data

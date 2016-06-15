@@ -33,8 +33,7 @@ class Database:
                                               "AND STATUS='CLD'"
         
         self.getAllFromOriginExchange = "SELECT * FROM BOT_TRANSACTION WHERE ORIGIN_EXCHANGE='{oe}'"
-        self.getAllPendingFromOriginExchange = "SELECT * FROM BOT_TRANSACTION WHERE ORIGIN_EXCHANGE='{oe}' " \
-                                               "AND STATUS='PND'"
+        self.getAllPendingFromOriginExchange = "SELECT * FROM BOT_TRANSACTION WHERE STATUS='PND' AND ORIGIN_EXCHANGE='{oe}';"
         self.getAllActiveFromOriginExchange = "SELECT * FROM BOT_TRANSACTION WHERE ORIGIN_EXCHANGE='{oe}' " \
                                               "AND STATUS='ACT'"
         self.getAllNewFromOriginExchange = "SELECT * FROM BOT_TRANSACTION WHERE ORIGIN_EXCHANGE='{oe}' " \

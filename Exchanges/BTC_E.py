@@ -18,6 +18,7 @@ class BTCEExchange(IExchange):
         self.username = "Fireblade8998"
         self.api_secret = "e740a78137d11056490b3e72a04bc6d35c035c351bde2dad8ddf419c9f848b4c"
         self.nonce = self.nonce_api_call()
+        self.readyForBuy = True
 
     def getNonce(self):
         """
@@ -81,13 +82,24 @@ class BTCEExchange(IExchange):
     # should return a JSON dictionary to be parsed including order ID and execution status
     def buy(self, amount):
         """
-        Due to constraints in the BTC-E API, no instant (market) order is available.
-        Creates a buy limit order set to the top of the ask table - should execute instantly. May need some work.
+        1. Check if enough funds exist for the buy, if not mark exchange as "no buy"
+        2. Due to constraints in the BTC-E API, no instant (market) order is available.
+           Creates a buy limit order set to the top of the ask table - should execute instantly. May need some work.
 
         @param amount: amount in BTC - ***MUST BE ROUNDED TO 3 PLACES BECAUSE BTC-E IS RETARDED***
         @return: {success (0 or 1), amount bought, price, order_id (0 or order id)}
         """
+
         currentPrice = self.getCurrentBuyPrice()
+        data = self.getAccountBalance()
+        usd = data['USD']
+
+        # check that enough funds exist in the exchange, if not mark exchange as "no buy" and return
+        if amount * currentPrice >= usd:
+            print "Exchange " + self.name + " has run out of funds and is being marked as no buy."
+            self.readyForBuy = False
+            return {'success': 0, 'amount': 0}
+
         json = self.api_call("Trade", {'pair': "btc_usd", 'type': 'buy', 'amount': float("{0:.3f}".format(amount)),
                                        'rate': currentPrice})
         if json['success'] == 0:
@@ -146,7 +158,7 @@ class BTCEExchange(IExchange):
 
         #package new ticker object and return
         ticker['name'] = self.name
-        ticker['fee'] = Decimal(fee / 100)
+        ticker['fee'] = Decimal(self.getExchangeFee() / 100) #Decimal(fee / 100)
         ticker['buy'] = Decimal(ticker['buy'])
         ticker['sell'] = Decimal(ticker['sell'])
         return ticker
@@ -189,7 +201,7 @@ class BTCEExchange(IExchange):
         Returns all open orders.
         """
         #data = self.api_call("ActiveOrders", {})
-        data = {'success':1,'return':{'343152':{'pair':'btc_usd','type':'sell','amount':12.345,'rate':485,'timestamp_created':1342448420,'status':0}}}
+        data = {'success':1,'return':{'12446':{'pair':'btc_usd','type':'sell','amount':12.345,'rate':485,'timestamp_created':1342448420,'status':0}}}
         if data['success'] == 0:
             return {}
         # package the results to be similar to other exchange outputs
@@ -226,11 +238,11 @@ class BTCEExchange(IExchange):
         Returns the exchanges's buy/sell fee
         """
         # get trade info from public API v3
-        info = requests.get("https://btc-e.com/api/3/info").json()
+        #info = requests.get("https://btc-e.com/api/3/info").json()
 
-        fee = info['pairs']['btc_usd']['fee']
+        #fee = info['pairs']['btc_usd']['fee']
 
-        return fee
+        return 0.2
 
     def getUnconfirmedDeposits(self):
         """
@@ -257,4 +269,5 @@ class BTCEExchange(IExchange):
         @param address: the BTC address to send the coins to
         @param amount: the amount to send from BTC-E's wallet
         """
-        return self.api_call("WithdrawCoin", {'coinName': "BTC", 'address': address, 'amount': amount})
+        data = self.api_call("WithdrawCoin", {'coinName': "BTC", 'address': address, 'amount': amount})
+        return data
