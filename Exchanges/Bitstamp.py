@@ -92,7 +92,7 @@ class BitstampExchange(IExchange):
         # check that enough funds exist in the exchange, if not mark exchange as "no buy" and return
         if amount * currentPrice >= usd:
             print "Exchange " + self.name + " has run out of funds and is being marked as no buy."
-            self.readyForBuy = False
+            #self.readyForBuy = False
             return {'success': 0, 'amount': 0}
 
         json = self.api_call("buy", {'amount': amount, 'price': currentPrice}, 1)
@@ -258,4 +258,8 @@ class BitstampExchange(IExchange):
         @param amount: the amount to send from Bitstamp's wallet
         """
         data = self.api_call("bitcoin_withdrawal", {'address': address, 'amount': amount, 'instant': 0}, 1)
-        return data
+
+        if "error" in data:
+            return {'success': 0, 'error': data['error']}
+        else:
+            return {'success': 1, 'id': data['id']}

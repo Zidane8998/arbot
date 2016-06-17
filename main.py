@@ -106,8 +106,8 @@ def findExchangePairs(current, exchanges, curBuy=0, defaultProfitMargin=0.50):
             profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(remoteSell, curBuy,
                                                                                 remoteFee, curFee)
 
-            if profit >= defaultProfitMargin:
-                pairs.append({'profit': profit, 'sellExchange': remote, 'buyExchange': current})
+            if profit >= defaultProfitMargin and current.readyForBuy is True:
+                pairs.append({'profit': profit, 'sellExchange': remote, 'buyExchange': current, 'type': 'currentBuy'})
 
             """
             If profit is available by buying on a remote exchange and selling on this exchange, store in list
@@ -115,8 +115,8 @@ def findExchangePairs(current, exchanges, curBuy=0, defaultProfitMargin=0.50):
             # BUY from remote, SELL on current
             profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, remoteBuy,
                                                                                 curFee, remoteFee)
-            if profit >= defaultProfitMargin:
-                pairs.append({'profit': profit, 'sellExchange': current, 'buyExchange': remote})
+            if profit >= defaultProfitMargin and remote.readyForBuy is True:
+                pairs.append({'profit': profit, 'sellExchange': current, 'buyExchange': remote, 'type': 'remoteBuy'})
 
             """
             Sort the list by highest expected profit
@@ -213,11 +213,12 @@ def main():
     btce.buy(2)
     """
     Populate ticker information for all exchanges, returning JSON format of {Bitcoin exchange name: name, buy: buy price, sell: sell price}
-    """
     for ex in exchanges:
         json = ex.getTicker()
         exTicker = {'name': ex.name, 'buy': json['buy'], 'sell': json['sell'], 'fee': json['fee']}
         global_ticker[ex.name] = exTicker
+    """
+
 
     """
     Main program loop: for all exchanges, get ticker information
@@ -233,7 +234,7 @@ def main():
 
             json = ex.getTicker()  # this call MUST return a dict with these elements or it WILL blow up
             exTicker = {'name': ex.name, 'buy': json['buy'], 'sell': json['sell'], 'fee': json['fee']}
-            global_ticker[ex.name] = exTicker
+
             """
             Process all transactions with this exchange as a target (may replace later with individual
             database calls - slower but more accurate)
@@ -416,213 +417,341 @@ def main():
                     for pair in pairs:
                         if pair['sellExchange'] != ex:
                             remote = pair['sellExchange']
+                            print "Withdrawing to " + remote.name
                             ex.withdrawToAddress(remote.getBTCAddress(), cur['AMOUNT'])
                             db.changeTransactionStatus(cur['ID'], 'INT')
 
             """
             Find buy low / sell high pairing if it exists by comparing all exchange price points
             """
-            for key, cur in global_ticker.iteritems():
-                if key != ex.name:
-                    """
-                    If a profit can be made by buying / selling on another exchange, set up a new transaction
 
-                    Profit formula: (sell price - sell fee) - (buy price + buy fee + transaction fee) = profit
-                    """
-                    for key2, remote in global_ticker.iteritems():
-                        if key2 != key:
-                            """
-                            If profit can be made via the following
-                                BUY: Remote Exchange: KEY2
-                                SELL: Current Exchange: KEY
-                            BUY the BTC
-                            Create a new transaction
-                            Withdraw the coins [remote -> cur]
-                            """
+            """
+            In progress - refactor all below code to use the findExchangePairs method instead of global ticker
+            """
+            pairs = findExchangePairs(ex, exchanges)
 
-                            remoteExchange = getExchangeByName(exchanges, key2)
-                            currentExchange = getExchangeByName(exchanges, key)
+            for pair in pairs:
 
-                            curSell = cur['sell']
-                            remoteSell = remote['sell']
-                            curBuy = cur['buy']
-                            remoteBuy = remote['buy']
-                            curFee = cur['fee']
-                            remoteFee = remote['fee']
+                currentExchange = ex
+                remoteExchange = None
 
-                            profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, remoteBuy,
-                                                                                                curFee, remoteFee)
 
-                            if profit >= defaultProfitMargin and remoteExchange.readyForBuy is True:
-                                print "Profit opportunity: buying from " + key2 + " and selling on " + key
-                                print "-total sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
-                                print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))
-                                print "-total fees: $" + str('{0:.2f}'.format(totalFees))
-                                print "-PROFIT: $" + str('{0:.2f}'.format(profit))
 
-                                # make sure the buy went through before making a new transaction
+                # BUY: current exchange
+                # SELL: remote exchange
+                if pair['type'] == "currentBuy":
+                    # set the remote exchange correctly and process accordingly
+                    remoteExchange = pair['sellExchange']
 
-                                print "Attempting to buy " + str(defaultTradeSize) + " from " + key2 + " exchange!"
-                                data = remoteExchange.buy(defaultTradeSize)
+                    curTicker = currentExchange.getTicker()
+                    remoteTicker = remoteExchange.getTicker()
 
-                                if data['success'] != 0:
-                                    # if buy price is different than expected, record it in the transaction
-                                    totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * remoteFee)
+                    # parse all ticker values
+                    curSell = curTicker['sell']
+                    remoteSell = remoteTicker['sell']
+                    curBuy = curTicker['buy']
+                    remoteBuy = remoteTicker['buy']
+                    curFee = curTicker['fee']
+                    remoteFee = remoteTicker['fee']
 
-                                    # if order ID is returned, buy is still being filled, needs time to execute
-                                    # create a new transaction to track the buy and continue on through the loop
-                                    if data['order_id'] != 0:
-                                        id = db.createNewTransactionWithOrderID('NEW', data['amount'], key2, key, totalBuyCost, data['order_id'])
-                                        print "Buy order is not complete, leaving in NEW status."
-                                        continue
+                    profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(remoteSell, curBuy,
+                                                                                        remoteFee, curFee)
 
-                                    # if buy is successful, make new transaction
-                                    print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
+                    if profit >= defaultProfitMargin:
+                        print "Profit opportunity: buying from " + currentExchange.name + " and selling on " + remoteExchange.name
+                        print "-total sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
+                        print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))
+                        print "-total fees: $" + str('{0:.2f}'.format(totalFees))
+                        print "-PROFIT: $" + str('{0:.2f}'.format(profit))
 
-                                    id = db.createNewTransaction('NEW', data['amount'], key2, key, totalBuyCost)
+                        # make sure the buy went through before making a new transaction
+                        print "Attempting to buy " + str(defaultTradeSize) + " from " + currentExchange.name + " exchange!"
+                        data = currentExchange.buy(defaultTradeSize)
 
-                                    # if profit margin still exists with locked in buy price:
-                                    # withdraw and change transaction status
-                                    curSell = currentExchange.getCurrentSellPrice()
-                                    remoteBuy = remoteExchange.getCurrentBuyPrice()
+                        # if buy was successful
+                        if data['success'] != 0:
+                            # if buy price is different than expected, record it in the transaction
+                            totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * curFee)
 
-                                    # set buy fee to 0, it's already factored into totalBuyCost above
-                                    profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell,
-                                                                                                        remoteBuy,
-                                                                                                        curFee,
-                                                                                                        0)
+                            # if order ID is returned, buy is still being filled, needs time to execute
+                            # create a new transaction to track the buy and continue on through the loop
+                            if data['order_id'] != 0:
+                                id = db.createNewTransactionWithOrderID('NEW', data['amount'], currentExchange.name, remoteExchange.name,
+                                                                        totalBuyCost, data['order_id'])
+                                print "Buy order is not complete, leaving in NEW status."
+                                continue
 
-                                    if profit >= defaultProfitMargin:
+                            else:
+                                # if buy is completed in one shot, make new transaction and withdraw
+                                print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
 
-                                        # withdraw to the current exchange
-                                        remoteExchange.withdrawToAddress(currentExchange.getBTCAddress(), data['amount'])
+                                id = db.createNewTransaction('NEW', data['amount'], currentExchange.name, remoteExchange.name, totalBuyCost)
 
-                                        # set transaction status to In Transit
-                                        db.changeTransactionStatus(id, 'INT')
+                                print "Withdrawing to " + remoteExchange.name
 
-                                    # else, check if a profit can be made on the remote exchange, change status
-                                    # this is only possible with large price swings or transactions severely delayed
-                                    else:
-                                        # if profit can be made, sell and set as closed
-                                        remoteSell = remoteExchange.getCurrentSellPrice()
-                                        originalBuyPrice = db.getTransactionBuyPrice(id)
+                                # withdraw to the remote exchange
+                                withdrawData = currentExchange.withdrawToAddress(remoteExchange.getBTCAddress(), data['amount'])
 
-                                        # set buy fee to 0 for this calc, already factored into original buy price
-                                        profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(remoteSell,
-                                                                                        originalBuyPrice, remoteFee, 0)
+                                # set transaction status to In Transit
+                                db.changeTransactionStatus(id, 'INT')
 
-                                        if profit >= defaultProfitMargin:
-                                            # attempt to sell the coins on the remote exchange
-                                            data2 = remoteExchange.sell(data['amount'])
+                        # if buy wasn't successful
+                        else:
+                            print "Something went wrong while trying to buy. Transaction was not created."
 
-                                            if data2['success'] == 1:
-                                                # set final sell price
-                                                db.changeFinalSellAmount(id, data2['amount'])
-                                                # set as closed
-                                                db.changeTransactionStatus(id, 'CLD')
-                                            else:
-                                                print "Something went wrong while trying to sell. Transaction was not closed."
-                                        # otherwise, set to pending and clear out target exchange
-                                        else:
-                                            # set as pending
-                                            db.changeTransactionStatus(id, 'PND')
-                                            # clear out target exchange
-                                            db.clearOutTargetExchange(id)
-                                else:
-                                    print "Something went wrong while trying to buy. Transaction was not created."
+                # BUY: remote exchange
+                # SELL: current exchange
+                elif pair['type'] == "remoteBuy":
+                    remoteExchange = pair['buyExchange']
 
-                            """
-                            If profit can be made via the following
-                                BUY: Current Exchange: KEY
-                                SELL: Remote Exchange: KEY2
-                            BUY the BTC
-                            Create a new transaction
-                            Withdraw the coins [cur - > remote]
-                            """
+                    curTicker = currentExchange.getTicker()
+                    remoteTicker = remoteExchange.getTicker()
 
-                            profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(remoteSell, curBuy,
-                                                                                                remoteFee, curFee)
+                    # parse all ticker values
+                    curSell = curTicker['sell']
+                    remoteSell = remoteTicker['sell']
+                    curBuy = curTicker['buy']
+                    remoteBuy = remoteTicker['buy']
+                    curFee = curTicker['fee']
+                    remoteFee = remoteTicker['fee']
 
-                            if profit >= defaultProfitMargin and currentExchange.readyForBuy is True:
-                                print "Profit opportunity: buying from " + key + " and selling on " + key2
-                                print "-total sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
-                                print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))
-                                print "-total fees: $" + str('{0:.2f}'.format(totalFees))
-                                print "-PROFIT: $" + str('{0:.2f}'.format(profit))
+                    profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, remoteBuy,
+                                                                                        curFee, remoteFee)
+                    # if buy was successful
+                    if data['success'] != 0:
+                        # if buy price is different than expected, record it in the transaction
+                        totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * curFee)
 
-                                # make sure the buy went through before making a new transaction
+                        # if order ID is returned, buy is still being filled, needs time to execute
+                        # create a new transaction to track the buy and continue on through the loop
+                        if data['order_id'] != 0:
+                            id = db.createNewTransactionWithOrderID('NEW', data['amount'], remoteExchange.name,
+                                                                    currentExchange.name,
+                                                                    totalBuyCost, data['order_id'])
+                            print "Buy order is not complete, leaving in NEW status."
+                            continue
 
-                                print "Attempting to buy " + str(defaultTradeSize) + " from " + key + " exchange!"
-                                data = currentExchange.buy(defaultTradeSize)
+                        else:
+                            # if buy is completed in one shot, make new transaction and withdraw
+                            print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
 
-                                if data['success'] != 0:
-                                    # if buy price is different than expected, record it in the transaction
-                                    totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * curFee)
+                            id = db.createNewTransaction('NEW', data['amount'], remoteExchange.name,
+                                                         currentExchange.name, totalBuyCost)
 
-                                    # if order ID is returned, buy is still being filled, needs time to execute
-                                    # create a new transaction to track the buy and continue on through the loop
-                                    if data['order_id'] != 0:
-                                        id = db.createNewTransactionWithOrderID('NEW', data['amount'], key, key2,
-                                                                                totalBuyCost, data['order_id'])
-                                        print "Buy order is not complete, leaving in NEW status."
-                                        continue
+                            print "Withdrawing to " + currentExchange.name
 
-                                    # if buy is successful, make new transaction
-                                    print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
+                            # withdraw to the remote exchange
+                            withdrawData = remoteExchange.withdrawToAddress(currentExchange.getBTCAddress(),
+                                                                             data['amount'])
 
-                                    id = db.createNewTransaction('NEW', data['amount'], key, key2, totalBuyCost)
+                            # set transaction status to In Transit
+                            db.changeTransactionStatus(id, 'INT')
 
-                                    # if profit margin still exists with locked in buy price:
-                                    # withdraw and change transaction status
-                                    remoteSell = remoteExchange.getCurrentSellPrice()
-                                    curBuy = currentExchange.getCurrentBuyPrice()
+                    # if buy wasn't successful
+                    else:
+                        print "Something went wrong while trying to buy. Transaction was not created."
 
-                                    # set buy fee to 0, it's already factored into totalBuyCost above
-                                    profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell,
-                                                                                                        remoteBuy,
-                                                                                                        curFee,
-                                                                                                        0)
-
-                                    if profit >= defaultProfitMargin:
-
-                                        # withdraw to the current exchange
-                                        currentExchange.withdrawToAddress(remoteExchange.getBTCAddress(),
-                                                                          data['amount'])
-
-                                        # set transaction status to In Transit
-                                        db.changeTransactionStatus(id, 'INT')
-
-                                    # else, check if a profit can be made on the current exchange, change status
-                                    # this is only possible with large price swings or transactions severely delayed
-                                    else:
-                                        # if profit can be made, sell and set as closed
-                                        curSell = currentExchange.getCurrentSellPrice()
-                                        originalBuyPrice = db.getTransactionBuyPrice(id)
-
-                                        # set buy fee to 0 for this calc, already factored into original buy price
-                                        profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell,
-                                                                                                            originalBuyPrice,
-                                                                                                            curFee,
-                                                                                                            0)
-
-                                        if profit >= defaultProfitMargin:
-                                            # sell the coins on the remote exchange
-                                            data2 = currentExchange.sell(data['amount'])
-
-                                            if data2['success'] == 1:
-                                                # set final sell price
-                                                db.changeFinalSellAmount(id, data2['amount'])
-                                                # set as closed
-                                                db.changeTransactionStatus(id, 'CLD')
-
-                                        # otherwise, set to pending and clear out target exchange
-                                        else:
-                                            # set as pending
-                                            db.changeTransactionStatus(id, 'PND')
-                                            # clear out target exchange
-                                            db.clearOutTargetExchange(id)
-                                else:
-                                    print "Something went wrong while trying to buy. Transaction was not created."
+            # for key, cur in global_ticker.iteritems():
+            #     if key != ex.name:
+            #         """
+            #         If a profit can be made by buying / selling on another exchange, set up a new transaction
+            #
+            #         Profit formula: (sell price - sell fee) - (buy price + buy fee + transaction fee) = profit
+            #         """
+            #         for key2, remote in global_ticker.iteritems():
+            #             if key2 != key:
+            #                 """
+            #                 If profit can be made via the following
+            #                     BUY: Remote Exchange: KEY2
+            #                     SELL: Current Exchange: KEY
+            #                 BUY the BTC
+            #                 Create a new transaction
+            #                 Withdraw the coins [remote -> cur]
+            #                 """
+            #
+            #                 remoteExchange = getExchangeByName(exchanges, key2)
+            #                 currentExchange = getExchangeByName(exchanges, key)
+            #
+            #                 curSell = cur['sell']
+            #                 remoteSell = remote['sell']
+            #                 curBuy = cur['buy']
+            #                 remoteBuy = remote['buy']
+            #                 curFee = cur['fee']
+            #                 remoteFee = remote['fee']
+            #
+            #                 profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell, remoteBuy,
+            #                                                                                     curFee, remoteFee)
+            #
+            #                 if profit >= defaultProfitMargin and remoteExchange.readyForBuy is True:
+            #                     print "Profit opportunity: buying from " + key2 + " and selling on " + key
+            #                     print "-total sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
+            #                     print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))
+            #                     print "-total fees: $" + str('{0:.2f}'.format(totalFees))
+            #                     print "-PROFIT: $" + str('{0:.2f}'.format(profit))
+            #
+            #                     # make sure the buy went through before making a new transaction
+            #
+            #                     print "Attempting to buy " + str(defaultTradeSize) + " from " + key2 + " exchange!"
+            #                     data = remoteExchange.buy(defaultTradeSize)
+            #
+            #                     if data['success'] != 0:
+            #                         # if buy price is different than expected, record it in the transaction
+            #                         totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * remoteFee)
+            #
+            #                         # if order ID is returned, buy is still being filled, needs time to execute
+            #                         # create a new transaction to track the buy and continue on through the loop
+            #                         if data['order_id'] != 0:
+            #                             id = db.createNewTransactionWithOrderID('NEW', data['amount'], key2, key, totalBuyCost, data['order_id'])
+            #                             print "Buy order is not complete, leaving in NEW status."
+            #                             continue
+            #
+            #                         # if buy is successful, make new transaction
+            #                         print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
+            #
+            #                         id = db.createNewTransaction('NEW', data['amount'], key2, key, totalBuyCost)
+            #
+            #                         # if profit margin still exists with locked in buy price:
+            #                         # withdraw and change transaction status
+            #                         curSell = currentExchange.getCurrentSellPrice()
+            #                         remoteBuy = remoteExchange.getCurrentBuyPrice()
+            #
+            #                         # set buy fee to 0, it's already factored into totalBuyCost above
+            #                         profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell,
+            #                                                                                             remoteBuy,
+            #                                                                                             curFee,
+            #                                                                                             0)
+            #
+            #                         if profit >= defaultProfitMargin:
+            #
+            #                             # withdraw to the current exchange
+            #                             remoteExchange.withdrawToAddress(currentExchange.getBTCAddress(), data['amount'])
+            #
+            #                             # set transaction status to In Transit
+            #                             db.changeTransactionStatus(id, 'INT')
+            #
+            #                         # else, check if a profit can be made on the remote exchange, change status
+            #                         # this is only possible with large price swings or transactions severely delayed
+            #                         else:
+            #                             # if profit can be made, sell and set as closed
+            #                             remoteSell = remoteExchange.getCurrentSellPrice()
+            #                             originalBuyPrice = db.getTransactionBuyPrice(id)
+            #
+            #                             # set buy fee to 0 for this calc, already factored into original buy price
+            #                             profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(remoteSell,
+            #                                                                             originalBuyPrice, remoteFee, 0)
+            #
+            #                             if profit >= defaultProfitMargin:
+            #                                 # attempt to sell the coins on the remote exchange
+            #                                 data2 = remoteExchange.sell(data['amount'])
+            #
+            #                                 if data2['success'] == 1:
+            #                                     # set final sell price
+            #                                     db.changeFinalSellAmount(id, data2['amount'])
+            #                                     # set as closed
+            #                                     db.changeTransactionStatus(id, 'CLD')
+            #                                 else:
+            #                                     print "Something went wrong while trying to sell. Transaction was not closed."
+            #                             # otherwise, set to pending and clear out target exchange
+            #                             else:
+            #                                 # set as pending
+            #                                 db.changeTransactionStatus(id, 'PND')
+            #                                 # clear out target exchange
+            #                                 db.clearOutTargetExchange(id)
+            #                     else:
+            #                         print "Something went wrong while trying to buy. Transaction was not created."
+            #
+            #                 """
+            #                 If profit can be made via the following
+            #                     BUY: Current Exchange: KEY
+            #                     SELL: Remote Exchange: KEY2
+            #                 BUY the BTC
+            #                 Create a new transaction
+            #                 Withdraw the coins [cur - > remote]
+            #                 """
+            #
+            #                 profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(remoteSell, curBuy,
+            #                                                                                     remoteFee, curFee)
+            #
+            #                 if profit >= defaultProfitMargin and currentExchange.readyForBuy is True:
+            #                     print "Profit opportunity: buying from " + key + " and selling on " + key2
+            #                     print "-total sell revenue: $" + str('{0:.2f}'.format(totalSellRevenue))
+            #                     print "-total buy cost: $" + str('{0:.2f}'.format(totalBuyCost))
+            #                     print "-total fees: $" + str('{0:.2f}'.format(totalFees))
+            #                     print "-PROFIT: $" + str('{0:.2f}'.format(profit))
+            #
+            #                     # make sure the buy went through before making a new transaction
+            #
+            #                     print "Attempting to buy " + str(defaultTradeSize) + " from " + key + " exchange!"
+            #                     data = currentExchange.buy(defaultTradeSize)
+            #
+            #                     if data['success'] != 0:
+            #                         # if buy price is different than expected, record it in the transaction
+            #                         totalBuyCost = (data['price'] * data['amount']) + (data['price'] * data['amount'] * curFee)
+            #
+            #                         # if order ID is returned, buy is still being filled, needs time to execute
+            #                         # create a new transaction to track the buy and continue on through the loop
+            #                         if data['order_id'] != 0:
+            #                             id = db.createNewTransactionWithOrderID('NEW', data['amount'], key, key2,
+            #                                                                     totalBuyCost, data['order_id'])
+            #                             print "Buy order is not complete, leaving in NEW status."
+            #                             continue
+            #
+            #                         # if buy is successful, make new transaction
+            #                         print "Buy successful, bought " + str(data['amount']) + "@ $" + str(data['price'])
+            #
+            #                         id = db.createNewTransaction('NEW', data['amount'], key, key2, totalBuyCost)
+            #
+            #                         # if profit margin still exists with locked in buy price:
+            #                         # withdraw and change transaction status
+            #                         remoteSell = remoteExchange.getCurrentSellPrice()
+            #                         curBuy = currentExchange.getCurrentBuyPrice()
+            #
+            #                         # set buy fee to 0, it's already factored into totalBuyCost above
+            #                         profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell,
+            #                                                                                             remoteBuy,
+            #                                                                                             curFee,
+            #                                                                                             0)
+            #
+            #                         if profit >= defaultProfitMargin:
+            #                             print "Withdrawing to " + remoteExchange.name
+            #                             # withdraw to the current exchange
+            #                             currentExchange.withdrawToAddress(remoteExchange.getBTCAddress(),
+            #                                                               data['amount'])
+            #
+            #                             # set transaction status to In Transit
+            #                             db.changeTransactionStatus(id, 'INT')
+            #
+            #                         # else, check if a profit can be made on the current exchange, change status
+            #                         # this is only possible with large price swings or transactions severely delayed
+            #                         else:
+            #                             # if profit can be made, sell and set as closed
+            #                             curSell = currentExchange.getCurrentSellPrice()
+            #                             originalBuyPrice = db.getTransactionBuyPrice(id)
+            #
+            #                             # set buy fee to 0 for this calc, already factored into original buy price
+            #                             profit, totalSellRevenue, totalBuyCost, totalFees = calculateProfit(curSell,
+            #                                                                                                 originalBuyPrice,
+            #                                                                                                 curFee,
+            #                                                                                                 0)
+            #
+            #                             if profit >= defaultProfitMargin:
+            #                                 # sell the coins on the remote exchange
+            #                                 data2 = currentExchange.sell(data['amount'])
+            #
+            #                                 if data2['success'] == 1:
+            #                                     # set final sell price
+            #                                     db.changeFinalSellAmount(id, data2['amount'])
+            #                                     # set as closed
+            #                                     db.changeTransactionStatus(id, 'CLD')
+            #
+            #                             # otherwise, set to pending and clear out target exchange
+            #                             else:
+            #                                 # set as pending
+            #                                 db.changeTransactionStatus(id, 'PND')
+            #                                 # clear out target exchange
+            #                                 db.clearOutTargetExchange(id)
+            #                     else:
+            #                         print "Something went wrong while trying to buy. Transaction was not created."
 
 
 if __name__ == "__main__":
