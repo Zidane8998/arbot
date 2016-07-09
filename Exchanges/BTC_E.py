@@ -90,7 +90,7 @@ class BTCEExchange(IExchange):
         @return: {success (0 or 1), amount bought, price, order_id (0 or order id)}
         """
 
-        currentPrice = self.getCurrentBuyPrice()
+        currentPrice = Decimal(self.getCurrentBuyPrice())
         data = self.getAccountBalance()
         usd = data['USD']
 

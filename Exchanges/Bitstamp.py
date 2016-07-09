@@ -84,7 +84,7 @@ class BitstampExchange(IExchange):
         @param amount: amount in BTC
         """
 
-        currentPrice = self.getCurrentBuyPrice()
+        currentPrice = Decimal(self.getCurrentBuyPrice())
 
         data = self.getAccountBalance()
         usd = data['USD']

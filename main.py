@@ -435,8 +435,6 @@ def main():
                 currentExchange = ex
                 remoteExchange = None
 
-
-
                 # BUY: current exchange
                 # SELL: remote exchange
                 if pair['type'] == "currentBuy":
