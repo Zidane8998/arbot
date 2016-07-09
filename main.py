@@ -4,6 +4,7 @@ from operator import itemgetter
 from Database import Database
 from Exchanges.BTC_E import BTCEExchange
 from Exchanges.Bitstamp import BitstampExchange
+from Exchanges.Bitfinex import BitfinexExchange
 
 
 def getExchangeByName(exchanges, name):
@@ -184,6 +185,10 @@ def main():
     print bitstamp.getAccountBalance("USD")
     print bitstamp.getAccountBalance()
     """
+
+    bf = BitfinexExchange()
+    bf.getInfo()
+
 
     db = Database.Database()
 
