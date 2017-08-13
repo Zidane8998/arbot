@@ -6,27 +6,29 @@ import urllib
 import time
 import requests
 import base64
-import deprecation
+import urlparse
 from decimal import Decimal
 
 
 from Interfaces.IExchange import IExchange
 
-@deprecation.deprecated
-class BitfinexExchange(IExchange):
+
+class ItBitExchange(IExchange):
 
     def __init__(self):
-        self.name = "Bitfinex"
-        self.api_key = "BbSSGwjJldf3DkAwhANcO6Ej5lCDHujbUs9jmD4I9fn"
-        self.api_secret = "peW02XcKXdGTH0EEn2WW7RDPDOJB4WMKpUfmFVeIHRw"
-        self.nonce = None
+        self.name = "ItBit"
+        self.user_id = "A7C4E9D6-8B87-40E1-8936-6639D1449985"
+        self.api_key = "4Nt8uONPRVIlsYiHb7OoZg"
+        self.api_secret = "ttrYycKzVjVejO0Q/Lth5c6XgR/uveQcQhbAyrMWIzk"
+        self.api_address = "https://api.itbit.com/v1"
+        self.nonce = 0
         self.readyForBuy = True
 
     def getNonce(self):
         """
         Returns the nonce value needed for secure POST requests
         """
-        return str(long(time.time() * 100000))
+        return self.nonce+1
 
     def getSignature(self, params):
         """
@@ -34,42 +36,54 @@ class BitfinexExchange(IExchange):
         """
         return hmac.new(self.api_secret, params, digestmod=hashlib.sha384).hexdigest()
 
-    def nonce_api_call(self):
-        """
-        On init, calls to the BTC-E server to get the expected nonce for this particular API key.
-        """
-        params = {}
-        params['method'] = "getInfo"
-        params['nonce'] = 1
-        params = urllib.urlencode(params)
-        headers = {"Content-type": "application/x-www-form-urlencoded",
-                   "Key": self.api_key,
-                   "Sign": self.getSignature(params)}
-        conn = httplib.HTTPSConnection("btc-e.com")
-        conn.request("POST", "/tapi", params, headers)
-        response = conn.getresponse()
-        data = json.load(response)
-        res = str(data['error'])
-        if str.__contains__(res, "you should send"):
-            newNonce = res.split("you should send:", 1)[1]
-            return int(newNonce)
+    def generate_query_string(self, filters):
+        if filters:
+            return '?' + urllib.urlencode(filters)
         else:
-            exit()
+            return ''
 
-    def package_call(self, payload):
-        # encode the payload into Base 64
-        payload = base64.b64encode(json.dumps(payload))
-        # sign the payload with the API Secret
-        signature = hmac.new(self.api_secret, payload, hashlib.sha384).hexdigest()
+    def make_message(self, verb, url, body, nonce, timestamp):
+        # There should be no spaces after separators
+        return json.dumps([verb, url, body, str(nonce), str(timestamp)], separators=(',', ':'))
 
-        #create headers used by Bitfinex in the GET call
-        headers = {
-            'X-BFX-APIKEY': self.api_key,
-            'X-BFX-PAYLOAD': payload,
-            'X-BFX-SIGNATURE': signature
+    def sign_message(self, secret, verb, url, body, nonce, timestamp):
+        message = self.make_message(verb, url, body, nonce, timestamp)
+        sha256_hash = hashlib.sha256()
+        nonced_message = str(nonce) + message
+        sha256_hash.update(nonced_message.encode('utf8'))
+        hash_digest = sha256_hash.digest()
+        hmac_digest = hmac.new(secret, url.encode('utf8') + hash_digest, hashlib.sha512).digest()
+        return base64.b64encode(hmac_digest)
+
+    def make_request(self, verb, url, body_dict):
+        url = self.api_address + url
+        nonce = self.getNonce()
+        timestamp = self.getNonce()
+
+        if verb in ("PUT", "POST"):
+            json_body = json.dumps(body_dict)
+        else:
+            json_body = ""
+
+        signature = self.sign_message(self.api_secret, verb, url, json_body, nonce, timestamp)
+
+        auth_headers = {
+            'Authorization': self.user_id + ':' + signature.decode('utf8'),
+            'X-Auth-Timestamp': timestamp,
+            'X-Auth-Nonce': nonce,
+            'Content-Type': 'application/json'
         }
 
-        return headers
+        response = requests.request(verb, url, data=json_body, headers=auth_headers)
+        return response
+
+
+    def getInfo(self, filters={}):
+        filters['userId'] = self.user_id
+        queryString = self.generate_query_string(filters)
+        path = "/wallets%s" % (queryString)
+        response = self.make_request("GET", path, {})
+        return response
 
     def api_call(self, method, params={}):
         """
@@ -94,8 +108,6 @@ class BitfinexExchange(IExchange):
         data = response.json()
         return data
 
-    def getInfo(self):
-        return self.api_call('/v1/account_infos', {})
 
     # market buy - must be instant (market) buy
     # should return a JSON dictionary to be parsed including order ID and execution status

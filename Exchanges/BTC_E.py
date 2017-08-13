@@ -3,6 +3,7 @@ import hmac
 import httplib
 import json
 import urllib
+import deprecation
 from decimal import Decimal
 
 import requests
@@ -10,8 +11,8 @@ import requests
 from Interfaces.IExchange import IExchange
 
 
+@deprecation.deprecated
 class BTCEExchange(IExchange):
-
     def __init__(self):
         self.name = "BTC-E"
         self.api_key = "4QI4ACIG-6A5PAVOQ-6CECH97S-3PA8BBX4-KTDQKI5B"
@@ -97,7 +98,7 @@ class BTCEExchange(IExchange):
         # check that enough funds exist in the exchange, if not mark exchange as "no buy" and return
         if amount * currentPrice >= usd:
             print "Exchange " + self.name + " has run out of funds and is being marked as no buy."
-            #self.readyForBuy = False
+            # self.readyForBuy = False
             return {'success': 0, 'amount': 0}
 
         json = self.api_call("Trade", {'pair': "btc_usd", 'type': 'buy', 'amount': float("{0:.3f}".format(amount)),
@@ -105,7 +106,9 @@ class BTCEExchange(IExchange):
         if json['success'] == 0:
             return {'success': 0, 'amount': 0}
         else:
-            return {'success': json['success'], 'amount': Decimal(json['return']['received']) + Decimal(json['return']['remains']), 'price': Decimal(currentPrice), 'order_id': json['return']['order_id']}
+            return {'success': json['success'],
+                    'amount': Decimal(json['return']['received']) + Decimal(json['return']['remains']),
+                    'price': Decimal(currentPrice), 'order_id': json['return']['order_id']}
 
     # market sell - must be instant (market) sell
     # should return a JSON dictionary to be parsed including order ID and execution status
@@ -123,7 +126,8 @@ class BTCEExchange(IExchange):
         if json['success'] == 0:
             return {'success': 0, 'amount': 0}
         else:
-            return {'success': json['success'], 'amount': json['received'], 'price': Decimal(currentPrice), 'id': json['order_id']}
+            return {'success': json['success'], 'amount': json['received'], 'price': Decimal(currentPrice),
+                    'id': json['order_id']}
 
     # should return a balance available in either BTC or USD
     def getAccountBalance(self, currency={}):
@@ -148,17 +152,17 @@ class BTCEExchange(IExchange):
         {'name:': ex.name, 'buy': json['ask'], 'sell': json['bid'], 'last': json['last'] 'fee': json['fee']}
         """
 
-        #get ticker from public API v3
+        # get ticker from public API v3
         ticker = requests.get("https://btc-e.com/api/3/ticker/btc_usd").json()['btc_usd']
 
-        #get trade info from public API v3
+        # get trade info from public API v3
         info = requests.get("https://btc-e.com/api/3/info").json()
 
         fee = info['pairs']['btc_usd']['fee']
 
-        #package new ticker object and return
+        # package new ticker object and return
         ticker['name'] = self.name
-        ticker['fee'] = Decimal(self.getExchangeFee() / 100) #Decimal(fee / 100)
+        ticker['fee'] = Decimal(self.getExchangeFee() / 100)  # Decimal(fee / 100)
         ticker['buy'] = Decimal(ticker['buy'])
         ticker['sell'] = Decimal(ticker['sell'])
         return ticker
@@ -169,7 +173,6 @@ class BTCEExchange(IExchange):
         """
         # get ticker from public API v3
         return requests.get("https://btc-e.com/api/3/ticker/btc_usd").json()['btc_usd']
-
 
     # should return last buy price in USD
     def getCurrentBuyPrice(self):
@@ -200,8 +203,10 @@ class BTCEExchange(IExchange):
         """
         Returns all open orders.
         """
-        #data = self.api_call("ActiveOrders", {})
-        data = {'success':1,'return':{'12446':{'pair':'btc_usd','type':'sell','amount':12.345,'rate':485,'timestamp_created':1342448420,'status':0}}}
+        # data = self.api_call("ActiveOrders", {})
+        data = {'success': 1, 'return': {
+            '12446': {'pair': 'btc_usd', 'type': 'sell', 'amount': 12.345, 'rate': 485, 'timestamp_created': 1342448420,
+                      'status': 0}}}
         if data['success'] == 0:
             return {}
         # package the results to be similar to other exchange outputs
@@ -238,9 +243,9 @@ class BTCEExchange(IExchange):
         Returns the exchanges's buy/sell fee
         """
         # get trade info from public API v3
-        #info = requests.get("https://btc-e.com/api/3/info").json()
+        # info = requests.get("https://btc-e.com/api/3/info").json()
 
-        #fee = info['pairs']['btc_usd']['fee']
+        # fee = info['pairs']['btc_usd']['fee']
 
         return 0.2
 

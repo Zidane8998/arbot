@@ -2,9 +2,8 @@ from decimal import Decimal
 from operator import itemgetter
 
 from Database import Database
-from Exchanges.BTC_E import BTCEExchange
 from Exchanges.Bitstamp import BitstampExchange
-from Exchanges.Bitfinex import BitfinexExchange
+from Exchanges.ItBit import ItBitExchange
 
 
 def getExchangeByName(exchanges, name):
@@ -131,17 +130,6 @@ def findExchangePairs(current, exchanges, curBuy=0, defaultProfitMargin=0.50):
 def main():
 
     """
-    print btce.getInfo()
-    print btce.getActiveOrders()
-    print btce.cancelOrder(1)
-    print btce.getExecutedOrders()
-    print btce.withdrawToAddress(1, 1)
-    print btce.getTicker()
-    print "Get buy price: " + str(btce.getCurrentBuyPrice())
-    print "Get sell price: " + str(btce.getCurrentSellPrice())
-    print "Get exchange fee: " + str(btce.getExchangeFee())
-    print "Sell: " + str(btce.sell(1))
-    print "Buy: " + str(btce.buy(1))
 
     db.printResults(db.getAllTransactions())
     db.printResults(db.getAllPendingTransactions())
@@ -154,12 +142,6 @@ def main():
     db.printResults(db.getAllActiveTransactionsFromTargetExchange('Bitstamp'))
     db.printResults(db.getAllInTransitTransactionsFromTargetExchange('Bitstamp'))
     db.printResults(db.getAllClosedTransactionsFromTargetExchange('Bitstamp'))
-
-    db.printResults(db.getAllTransactionsFromOriginExchange('Bitfinex'))
-    db.printResults(db.getAllPendingTransactionsFromOriginExchange('Bitfinex'))
-    db.printResults(db.getAllActiveTransactionsFromOriginExchange('Bitfinex'))
-    db.printResults(db.getAllInTransitTransactionsFromOriginExchange('Bitfinex'))
-    db.printResults(db.getAllClosedTransactionsFromOriginExchange('Bitfinex'))
 
     print bitstamp.getAccountBalance("BTC")
     print bitstamp.getTicker()
@@ -186,17 +168,18 @@ def main():
     print bitstamp.getAccountBalance()
     """
 
-    bf = BitfinexExchange()
-    bf.getInfo()
+    ib = ItBitExchange()
+    ib.getInfo()
 
+    bitstamp = BitstampExchange()
 
     db = Database.Database()
 
-    testID = db.createNewTransactionWithOrderID('NEW', 0.25, 'BTC-E', 'Bitstamp', 560.03, 12446)
-    testID = db.createNewTransactionWithOrderID('NEW', 0.25, 'Bitstamp', 'BTC-E', 540.69, 12447)
-    testID = db.createNewTransaction('PND', 0.25, 'BTC-E', 'Bitstamp', 560.03)
-    db.clearOutTargetExchange(testID)
-    test = db.getAllTransactions()
+    #testID = db.createNewTransactionWithOrderID('NEW', 0.25, 'BTC-E', 'Bitstamp', 560.03, 12446)
+    #testID = db.createNewTransactionWithOrderID('NEW', 0.25, 'Bitstamp', 'BTC-E', 540.69, 12447)
+    #testID = db.createNewTransaction('PND', 0.25, 'BTC-E', 'Bitstamp', 560.03)
+    #db.clearOutTargetExchange(testID)
+    #test = db.getAllTransactions()
     #testID = db.createNewTransaction('PND', 0.25, 'Bitfinex', 'Bitstamp', 560.03)
     #db.clearOutTargetExchange(testID)
 
@@ -204,18 +187,15 @@ def main():
     defaultProfitMargin = Decimal(0.50)
     transactionFeeAmt = Decimal(0.0001)
 
-    bitstamp = BitstampExchange()
-    btce = BTCEExchange()
-
 
     exchanges = []
     global_ticker = {}
 
     exchanges.append(bitstamp)
-    exchanges.append(btce)
+    exchanges.append(ib)
 
-    bitstamp.buy(2)
-    btce.buy(2)
+    #bitstamp.buy(2)
+
     """
     Populate ticker information for all exchanges, returning JSON format of {Bitcoin exchange name: name, buy: buy price, sell: sell price}
     for ex in exchanges:
