@@ -4,6 +4,7 @@ from operator import itemgetter
 from Database import Database
 from Exchanges.Bitstamp import BitstampExchange
 from Exchanges.ItBit import ItBitExchange
+from Exchanges.Kraken import KrakenExchange
 
 
 def getExchangeByName(exchanges, name):
@@ -172,6 +173,10 @@ def main():
     ib.getInfo()
 
     bitstamp = BitstampExchange()
+
+    kraken = KrakenExchange()
+
+    print kraken.make_request("Balance")
 
     db = Database.Database()
 
